@@ -1,0 +1,8 @@
+Incident -> Case Create
+
+1 - API
+1 <-> n - While loop
+
+Incident Proceed DTM : NULL
+Incident Status : ??
+

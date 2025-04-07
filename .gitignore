@@ -1,0 +1,22 @@
+# Byte-compiled files
+*.pyc
+*.pyo
+_pycache_/
+*.pyd
+
+# Virtual environment
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# VS Code settings
+.vscode/
+
+# PyCharm settings
+.idea/
+
+.testArea/
+
+.bin/
