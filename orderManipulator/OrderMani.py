@@ -60,9 +60,6 @@ class Process_request:
 
     def process_single_document(self, doc):
         try:
-            if doc.get('order_id') != 1:
-                return False
-                
             account_number = doc.get('account_number') or doc.get('account_num')
             incident_id = doc.get('parameters', {}).get('incident_id')
             
@@ -80,7 +77,6 @@ class Process_request:
         processed_count = 0
         error_count = 0
         
-        # Sequential processing (safe)
         for doc in documents:
             if doc.get('order_id') == 1:
                 if self.process_single_document(doc):
@@ -92,31 +88,64 @@ class Process_request:
         logger.info(f"Processed {processed_count} documents, {error_count} errors")
         return processed_count, error_count
 
+    def process_option_2(self, documents):
+        logger.info("Processing option 2 - Monitor Payment")
+        # Implement logic for option 2
+        processed_count = 0
+        error_count = 0
+        for doc in documents:
+            if doc.get('order_id') == 2:
+                # Add your logic for Monitor Payment
+                logger.info(f"Monitoring payment for document {doc.get('_id')}")
+                processed_count += 1
+                time.sleep(1)  # Rate limiting
+        logger.info(f"Processed {processed_count} documents, {error_count} errors")
+        return processed_count, error_count
+
+    def process_option_3(self, documents):
+        logger.info("Processing option 3 - Monitor Payment Cancel")
+        # Implement logic for option 3
+        processed_count = 0
+        error_count = 0
+        for doc in documents:
+            if doc.get('order_id') == 3:
+                # Add your logic for Monitor Payment Cancel
+                logger.info(f"Canceling payment monitoring for document {doc.get('_id')}")
+                processed_count += 1
+                time.sleep(1)  # Rate limiting
+        logger.info(f"Processed {processed_count} documents, {error_count} errors")
+        return processed_count, error_count
+
+    def process_option_4(self, documents):
+        logger.info("Processing option 4 - Close_Monitor_If_No_Transaction")
+        # Implement logic for option 4
+        processed_count = 0
+        error_count = 0
+        for doc in documents:
+            if doc.get('order_id') == 4:
+                # Add your logic for Close_Monitor_If_No_Transaction
+                logger.info(f"Closing monitor for document {doc.get('_id')}")
+                processed_count += 1
+                time.sleep(1)  # Rate limiting
+        logger.info(f"Processed {processed_count} documents, {error_count} errors")
+        return processed_count, error_count
+
     def get_open_orders(self):
         return list(self.collection.find({"request_status": "Open"}))
-
-    def show_menu(self):
-        print("\nSelect an option:")
-        print("1: Cust Details for Case Registration")
-        print("2: Monitor Payment")
-        print("3: Monitor Payment Cancel")
-        print("4: Close_Monitor_If_No_Transaction")
-        try:
-            return int(input("Enter option (1-4): "))
-        except ValueError:
-            logger.warning("Invalid menu input - expected number 1-4")
-            return None
 
     def process_selected_option(self, option, documents):
         match option:
             case 1:
                 self.process_option_1(documents)
             case 2:
-                logger.info("Option 2 selected - Monitor Payment")
+                print()
+                # self.process_option_2(documents)
             case 3:
-                logger.info("Option 3 selected - Monitor Payment Cancel")
+                print()
+                # self.process_option_3(documents)
             case 4:
-                logger.info("Option 4 selected - Close_Monitor_If_No_Transaction")
+                print()
+                # self.process_option_4(documents)
             case _:
                 logger.warning(f"Invalid option selected: {option}")
 
@@ -133,12 +162,13 @@ class Process_request:
                     
                 logger.info(f"Found {len(open_orders)} open orders")
                 
-                option = self.show_menu()
-                if option is None:
-                    print("Invalid input. Please enter a number between 1-4.")
-                    continue
+                # Group documents by order_id to process them efficiently
+                for option in range(1, 5):  # Assuming options 1 to 4
+                    relevant_docs = [doc for doc in open_orders if doc.get('order_id') == option]
+                    if relevant_docs:
+                        logger.info(f"Processing {len(relevant_docs)} documents for order_id {option}")
+                        self.process_selected_option(option, relevant_docs)
                 
-                self.process_selected_option(option, open_orders)
                 time.sleep(1)
                 
             except KeyboardInterrupt:
