@@ -5,8 +5,11 @@ from utils.logger.logger import get_logger
 
 # Initialize logger for order processing tasks
 logger = get_logger("task_status_logger")
+if len(logger.handlers) > 1:  # Remove duplicates
+    logger.handlers = [logger.handlers[0]]  # Keep first handler
+logger.propagate = False  # Stop propagation
 
-class OrderProcessor:
+class Process_request:
     """
     Main class for processing customer orders and managing case registration workflows.
     Handles MongoDB interactions, order processing, and provides a user menu interface.
@@ -171,7 +174,7 @@ class OrderProcessor:
             case _:
                 logger.warning(f"Invalid option selected: {option}")
 
-    def run(self):
+    def run_process(self):
         """
         Main processing loop that continuously:
         1. Checks for open orders
@@ -208,11 +211,3 @@ class OrderProcessor:
             except Exception as e:
                 logger.error(f"Unexpected error: {str(e)}")
                 time.sleep(5)  # Wait after error before retrying
-
-if __name__ == "__main__":
-    try:
-        # Start the order processor
-        processor = OrderProcessor()
-        processor.run()
-    except Exception as e:
-        logger.critical(f"Failed to start OrderProcessor: {e}")
