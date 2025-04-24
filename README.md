@@ -1,4 +1,4 @@
-# Request Log - Keeps the data temporary inside the Mongo DB
+# Request Progress Log
 
 Main.py ->
 Read status = 'Open' -> Progress_log
