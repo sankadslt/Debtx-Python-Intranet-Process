@@ -1,145 +1,101 @@
 import time
+from concurrent.futures import ThreadPoolExecutor
 from utils.database.connectMongoDB import get_mongo_collection
 from .caseRegistration import IncidentProcessor
 from utils.logger.logger import get_logger
 
-# Initialize logger for order processing tasks
 logger = get_logger("task_status_logger")
-if len(logger.handlers) > 1:  # Remove duplicates
-    logger.handlers = [logger.handlers[0]]  # Keep first handler
-logger.propagate = False  # Stop propagation
+if len(logger.handlers) > 1:
+    logger.handlers = [logger.handlers[0]]
+logger.propagate = False
 
 class Process_request:
-    """
-    Main class for processing customer orders and managing case registration workflows.
-    Handles MongoDB interactions, order processing, and provides a user menu interface.
-    """
     
     def __init__(self):
-        """Initialize MongoDB connection and verify collection access"""
         self.collection = get_mongo_collection()
         if self.collection is None:
             raise ConnectionError("Failed to connect to MongoDB collection")
         logger.info("MongoDB connection established successfully")
 
     def process_case(self, account_number, incident_id):
-        """
-        Process customer details for case registration and update MongoDB document on success.
-        
-        Args:
-            account_number (str): Customer account number to process
-            incident_id (int): Associated incident ID for the case
-            
-        Returns:
-            bool: True if processing and update were successful, False otherwise
-        """
         logger.info(f"Processing case for account: {account_number}, incident: {incident_id}")
         
-        # Initialize incident processor with account details
-        processor = IncidentProcessor(
-            account_num=account_number,
-            incident_id=incident_id,
-            mongo_collection=self.collection
-        )
-        
-        # Process the incident (retrieve data, format, send to API)
-        success, response = processor.process_incident()
-        
-        if success:
-            # Update MongoDB document to mark as completed
+        try:
+            processor = IncidentProcessor(
+                account_num=account_number,
+                incident_id=incident_id,
+                mongo_collection=self.collection
+            )
+            
+            success, response = processor.process_incident()
+            
+            status = "Completed" if success else "Failed"
+            update_data = {
+                "request_status": status,
+                f"{status.lower()}_at": time.time(),
+                "api_response": response if success else str(response)
+            }
+            
             update_result = self.collection.update_one(
                 {
                     "$or": [
                         {"account_number": account_number},
-                        {"account_num": account_number}  # Handle different field names
+                        {"account_num": account_number}
                     ],
                     "parameters.incident_id": incident_id,
-                    "request_status": "Open"  # Only update open requests
+                    "request_status": "Open"
                 },
-                {
-                    "$set": {
-                        "request_status": "Completed",
-                        "completed_at": time.time(),  # Current timestamp
-                        "api_response": response  # Store API response
-                    }
-                }
+                {"$set": update_data}
             )
             
             if update_result.modified_count == 1:
-                logger.info(f"Successfully updated document for account {account_number}")
+                logger.info(f"Marked document as {status} for account {account_number}")
                 return True
-            else:
-                logger.warning(f"Failed to update document for account {account_number}")
-                return False
-        return False
+            logger.warning(f"Failed to update document for account {account_number}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error processing case for account {account_number}: {str(e)}")
+            return False
 
-    def get_open_orders(self):
-        """
-        Retrieve all open orders from MongoDB collection.
-        
-        Returns:
-            list: Collection of documents with request_status="Open"
-        """
-        return list(self.collection.find({"request_status": "Open"}))
+    def process_single_document(self, doc):
+        try:
+            if doc.get('order_id') != 1:
+                return False
+                
+            account_number = doc.get('account_number') or doc.get('account_num')
+            incident_id = doc.get('parameters', {}).get('incident_id')
+            
+            if not account_number or not incident_id:
+                logger.warning(f"Skipping document {doc.get('_id')} - missing required fields")
+                return False
+                
+            return self.process_case(account_number, incident_id)
+            
+        except Exception as e:
+            logger.error(f"Error processing document {doc.get('_id')}: {str(e)}")
+            return False
 
     def process_option_1(self, documents):
-        """
-        Process documents for Option 1 (Customer Details for Case Registration).
-        Filters documents by order_id=1 and processes valid cases.
-        
-        Args:
-            documents (list): MongoDB documents to process
-            
-        Returns:
-            tuple: (processed_count, error_count) tracking successful and failed operations
-        """
         processed_count = 0
         error_count = 0
         
+        # Sequential processing (safe)
         for doc in documents:
-            try:
-                doc_id = doc.get('_id', 'NO_ID')  # Get document ID or default
-                
-                # Skip documents not matching option 1 criteria
-                if doc.get('order_id') != 1:
-                    continue
-                    
-                # Extract required fields with fallbacks
-                account_number = doc.get('account_number') or doc.get('account_num')
-                parameters = doc.get('parameters', {})
-                incident_id = parameters.get('incident_id')
-                
-                # Validate required fields
-                if not account_number:
-                    logger.warning(f"Missing 'account_number' in document: {doc_id}")
-                    error_count += 1
-                    continue
-                if not incident_id:
-                    logger.warning(f"Missing 'incident_id' in document: {doc_id}")
-                    error_count += 1
-                    continue
-                    
-                # Process valid case and track results
-                if self.process_case(account_number, incident_id):
+            if doc.get('order_id') == 1:
+                if self.process_single_document(doc):
                     processed_count += 1
                 else:
                     error_count += 1
-                    
-            except Exception as e:
-                error_count += 1
-                logger.error(f"Error processing document {doc_id}: {str(e)}")
-                continue
-                
+                time.sleep(1)  # Rate limiting
+        
         logger.info(f"Processed {processed_count} documents, {error_count} errors")
         return processed_count, error_count
 
+    def get_open_orders(self):
+        return list(self.collection.find({"request_status": "Open"}))
+
     def show_menu(self):
-        """
-        Display interactive menu to user and capture selection.
-        
-        Returns:
-            int: User-selected option (1-4) or None for invalid input
-        """
         print("\nSelect an option:")
         print("1: Cust Details for Case Registration")
         print("2: Monitor Payment")
@@ -152,62 +108,42 @@ class Process_request:
             return None
 
     def process_selected_option(self, option, documents):
-        """
-        Route processing to the appropriate handler based on user selection.
-        
-        Args:
-            option (int): User-selected menu option
-            documents (list): MongoDB documents to process
-        """
         match option:
             case 1:
-                self.process_option_1(documents)  # Case registration
+                self.process_option_1(documents)
             case 2:
                 logger.info("Option 2 selected - Monitor Payment")
-                # Future implementation
             case 3:
                 logger.info("Option 3 selected - Monitor Payment Cancel")
-                # Future implementation
             case 4:
                 logger.info("Option 4 selected - Close_Monitor_If_No_Transaction")
-                # Future implementation
             case _:
                 logger.warning(f"Invalid option selected: {option}")
 
     def run_process(self):
-        """
-        Main processing loop that continuously:
-        1. Checks for open orders
-        2. Displays menu
-        3. Processes selected option
-        Handles user interrupts and unexpected errors gracefully.
-        """
         logger.info("Starting Order Processor")
         while True:
             try:
-                # Check for open orders periodically
                 open_orders = self.get_open_orders()
                 
                 if not open_orders:
                     logger.info("No open orders found. Waiting...")
-                    time.sleep(5)  # Wait before checking again
+                    time.sleep(5)
                     continue
                     
                 logger.info(f"Found {len(open_orders)} open orders")
                 
-                # Get user input and validate
                 option = self.show_menu()
                 if option is None:
                     print("Invalid input. Please enter a number between 1-4.")
                     continue
                 
-                # Process the selected option
                 self.process_selected_option(option, open_orders)
-                time.sleep(1)  # Brief pause between operations
+                time.sleep(1)
                 
             except KeyboardInterrupt:
                 logger.info("Program terminated by user")
                 break
             except Exception as e:
                 logger.error(f"Unexpected error: {str(e)}")
-                time.sleep(5)  # Wait after error before retrying
+                time.sleep(5)
