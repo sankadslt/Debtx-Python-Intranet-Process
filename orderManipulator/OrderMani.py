@@ -1,7 +1,7 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
 from utils.database.connectMongoDB import get_mongo_collection
-from .caseRegistration import IncidentProcessor
+from .caseRegistration import Process_Incident
 from utils.logger.logger import get_logger
 
 logger = get_logger("task_status_logger")
@@ -21,13 +21,13 @@ class Process_request:
         logger.info(f"Processing case for account: {account_number}, incident: {incident_id}")
         
         try:
-            processor = IncidentProcessor(
+            process = Process_Incident(
                 account_num=account_number,
                 incident_id=incident_id,
                 mongo_collection=self.collection
             )
             
-            success, response = processor.process_incident()
+            success, response = process.process_incident()
             
             status = "Completed" if success else "Failed"
             update_data = {
@@ -163,12 +163,12 @@ class Process_request:
                 logger.info(f"Found {len(open_orders)} open orders")
                 
                 # Group documents by order_id to process them efficiently
-                for option in range(1, 5):  # Assuming options 1 to 4
+                optionCount = 4
+                for option in range(1, optionCount):  # Assuming options 1 to 4
                     relevant_docs = [doc for doc in open_orders if doc.get('order_id') == option]
                     if relevant_docs:
                         logger.info(f"Processing {len(relevant_docs)} documents for order_id {option}")
                         self.process_selected_option(option, relevant_docs)
-                
                 time.sleep(1)
                 
             except KeyboardInterrupt:

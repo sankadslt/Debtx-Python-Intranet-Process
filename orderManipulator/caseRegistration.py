@@ -14,7 +14,7 @@ if len(logger.handlers) > 1:
     logger.handlers = [logger.handlers[0]]
 logger.propagate = False
 
-class IncidentProcessor:
+class Process_Incident:
     
     def __init__(self, account_num, incident_id, mongo_collection):
         self.account_num = str(account_num)
