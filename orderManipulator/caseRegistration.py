@@ -159,6 +159,7 @@ class Process_Incident:
             "Doc_Version": doc_version,
             "Incident_Id": self.incident_id,
             "Account_Num": self.account_num,
+            "Customer_Ref": "",
             "Arrears": 1000,
             "arrears_band": "",
             "Created_By": "drs_admin",
@@ -188,7 +189,7 @@ class Process_Incident:
                 "Nic": "",
                 "Customer_Type_Id": 0,
                 "Customer_Type": "",
-                "customer_ref": "",
+                "Customer_Ref": "",
                 "Email_Address": ""
             },
             "Account_Details": {
@@ -351,6 +352,9 @@ class Process_Incident:
                 # Process customer/account details only once
                 if not self.mongo_data["Customer_Details"].get("Customer_Name"):
                     
+                    customer_ref_value = row.get("CUSTOMER_REF", "") or "UNKNOWN"  # Fallback to "UNKNOWN" if empty
+                    self.mongo_data["Customer_Ref"] = customer_ref_value
+                    
                     # Handle contact details (email, mobile, work contact)
                     if row.get("TECNICAL_CONTACT_EMAIL"):
                         # Validate email format and add to contact details
@@ -396,7 +400,7 @@ class Process_Incident:
                         "Nic": str(row.get("NIC", "")),
                         "Customer_Type_Id": int(row.get("CUSTOMER_TYPE_ID", 0)),
                         "Customer_Type": row.get("CUSTOMER_TYPE", ""),
-                        "customer_ref": row.get("CUSTOMER_REF", ""),
+                        "Customer_Ref": row.get("CUSTOMER_REF", ""),
                         "Email_Address": str(row.get("EMAIL", ""))
                     }
 
