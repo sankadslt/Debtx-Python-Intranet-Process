@@ -64,43 +64,39 @@ class MonitorPayment:
             logger.error(f"Error fetching request progress data: {str(e)}")
             return []
 
-    def get_request_details(self, request_id):
+    def get_request_details(self, request_id, connection):
         """
-        Retrieve all parameters (para_1 to para_10) from request_log_details.
+        Retrieve all parameters (para_1 to para_10) from request_log_details using an existing connection.
         
         Args:
             request_id (int): The request ID to fetch details for
+            connection: An active MySQL connection
             
         Returns:
             dict: Dictionary containing all parameters if found, None otherwise
         """
         try:
-            with MySQLConnectionSingleton() as db_connection:
-                connection = db_connection.get_connection()
-                if not connection:
-                    raise DatabaseConnectionError("Failed to connect to MySQL for fetching request details.")
+            cursor = connection.cursor(dictionary=True)
+            try:
+                query = """
+                    SELECT 
+                        para_1, para_2, para_3, para_4, para_5,
+                        para_6, para_7, para_8, para_9, para_10
+                    FROM request_log_details 
+                    WHERE Request_Id = %s
+                """
+                cursor.execute(query, (request_id,))
+                result = cursor.fetchone()
                 
-                cursor = connection.cursor(dictionary=True)
-                try:
-                    query = """
-                        SELECT 
-                            para_1, para_2, para_3, para_4, para_5,
-                            para_6, para_7, para_8, para_9, para_10
-                        FROM request_log_details 
-                        WHERE Request_Id = %s
-                    """
-                    cursor.execute(query, (request_id,))
-                    result = cursor.fetchone()
-                    
-                    if not result:
-                        logger.warning(f"No details found in request_log_details for Request_Id={request_id}")
-                        return None
-                    
-                    logger.debug(f"Retrieved request details for Request_Id={request_id}")
-                    return result
+                if not result:
+                    logger.warning(f"No details found in request_log_details for Request_Id={request_id}")
+                    return None
                 
-                finally:
-                    cursor.close()
+                logger.debug(f"Retrieved request details for Request_Id={request_id}")
+                return result
+            
+            finally:
+                cursor.close()
         
         except Exception as e:
             logger.error(f"Error fetching request details for Request_Id={request_id}: {str(e)}")
@@ -236,142 +232,156 @@ class MonitorPayment:
             logger.error(f"Error creating process_monitor_progress_log record: {str(e)}")
             return False
 
-    def create_process_monitor_details(self, monitor_id, request_id):
+    def create_process_monitor_details(self, monitor_id, request_id, connection):
         """
-        Create entry in process_monitor_details table.
+        Create entry in process_monitor_details table using an existing connection.
         
         Args:
             monitor_id (int): The Monitor_Id from process_monitor_log
             request_id (int): The original Request_Id to get details for
+            connection: An active MySQL connection
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            details = self.get_request_details(request_id)
+            details = self.get_request_details(request_id, connection)
             if not details:
                 return False
             
-            with MySQLConnectionSingleton() as db_connection:
-                connection = db_connection.get_connection()
-                if not connection:
-                    raise DatabaseConnectionError("Failed to connect to MySQL for creating monitor details.")
+            cursor = connection.cursor(dictionary=True)
+            try:
+                query = """
+                    INSERT INTO process_monitor_details (
+                        Monitor_Id, para_1, para_2, para_3, para_4, para_5,
+                        para_6, para_7, para_8, para_9, para_10
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(query, (
+                    monitor_id,
+                    details.get('para_1'),
+                    details.get('para_2'),
+                    details.get('para_3'),
+                    details.get('para_4'),
+                    details.get('para_5'),
+                    details.get('para_6'),
+                    details.get('para_7'),
+                    details.get('para_8'),
+                    details.get('para_9'),
+                    details.get('para_10')
+                ))
+                connection.commit()
                 
-                cursor = connection.cursor(dictionary=True)
-                try:
-                    query = """
-                        INSERT INTO process_monitor_details (
-                            Monitor_Id, para_1, para_2, para_3, para_4, para_5,
-                            para_6, para_7, para_8, para_9, para_10
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """
-                    cursor.execute(query, (
-                        monitor_id,
-                        details.get('para_1'),
-                        details.get('para_2'),
-                        details.get('para_3'),
-                        details.get('para_4'),
-                        details.get('para_5'),
-                        details.get('para_6'),
-                        details.get('para_7'),
-                        details.get('para_8'),
-                        details.get('para_9'),
-                        details.get('para_10')
-                    ))
-                    connection.commit()
-                    
-                    if cursor.rowcount == 1:
-                        logger.info(f"Created process_monitor_details record for Monitor_Id={monitor_id}")
-                        return True
-                    else:
-                        logger.warning("Failed to create process_monitor_details record")
-                        return False
-                
-                finally:
-                    cursor.close()
+                if cursor.rowcount == 1:
+                    logger.info(f"Created process_monitor_details record for Monitor_Id={monitor_id}")
+                    return True
+                else:
+                    logger.warning("Failed to create process_monitor_details record")
+                    return False
+            
+            finally:
+                cursor.close()
         
         except Exception as e:
             logger.error(f"Error creating process_monitor_details record: {str(e)}")
             return False
 
-    def update_request_progress_status(self, request_id, account_num, status="Completed"):
+    def update_request_progress_status(self, request_id, account_num, status="Completed", connection=None):
         """
-        Update the request_progress_log and request_log status.
+        Update the request_progress_log and request_log status using an existing connection.
         
         Args:
             request_id (int): The request ID to update
             account_num (str): The associated account number
             status (str): The status to set (default: "Completed")
+            connection: An active MySQL connection (optional)
             
         Returns:
             bool: True if both updates are successful, False otherwise
         """
         try:
-            with MySQLConnectionSingleton() as db_connection:
-                connection = db_connection.get_connection()
-                if not connection:
-                    error_msg = "Failed to connect to MySQL for updating request status"
-                    logger.error(f"Database connection error: {error_msg}")
-                    raise DatabaseConnectionError(error_msg)
+            close_connection = False
+            if connection is None:
+                with MySQLConnectionSingleton() as db_connection:
+                    connection = db_connection.get_connection()
+                    if not connection:
+                        error_msg = "Failed to connect to MySQL for updating request status"
+                        logger.error(f"Database connection error: {error_msg}")
+                        raise DatabaseConnectionError(error_msg)
+                    close_connection = True
+            
+            cursor = connection.cursor(dictionary=True)
+            try:
+                # Update request_progress_log
+                progress_query = """
+                    UPDATE request_progress_log
+                    SET Request_Status = %s, 
+                        Request_Status_Dtm = NOW(),
+                        Request_Status_Description = %s
+                    WHERE Request_Id = %s AND account_num = %s AND Request_Status = 'Open'
+                """
+                cursor.execute(progress_query, (
+                    status, 
+                    'Monitoring cancellation completed' if status == 'Completed' else 'Error in cancellation process',
+                    request_id, 
+                    account_num
+                ))
                 
-                cursor = connection.cursor(dictionary=True)
-                try:
-                    # Update request_progress_log
-                    progress_query = """
-                        UPDATE request_progress_log
-                        SET Request_Status = %s, 
-                            Request_Status_Dtm = NOW(),
-                            Request_Status_Description = 'Monitoring setup completed'
-                        WHERE Request_Id = %s AND account_num = %s AND Request_Status = 'Open'
-                    """
-                    cursor.execute(progress_query, (status, request_id, account_num))
-                    
-                    if cursor.rowcount != 1:
-                        error_msg = (
-                            f"No rows updated in request_progress_log for Request_Id={request_id}, "
-                            f"account_num={account_num}. Ensure row exists with Request_Status='Open'."
-                        )
-                        logger.warning(error_msg)
-                        connection.rollback()
-                        return False
-                    
-                    # Update request_log
-                    request_log_query = """
-                        UPDATE request_log
-                        SET Request_Status = %s, 
-                            Request_Status_Dtm = NOW(),
-                            Request_Status_Description = 'Monitoring setup completed'
-                        WHERE Request_Id = %s AND account_num = %s AND Request_Status = 'Open'
-                    """
-                    cursor.execute(request_log_query, (status, request_id, account_num))
-                    
-                    if cursor.rowcount != 1:
-                        error_msg = (
-                            f"No rows updated in request_log for Request_Id={request_id}, "
-                            f"account_num={account_num}. Ensure row exists with Request_Status='Open'."
-                        )
-                        logger.warning(error_msg)
-                        connection.rollback()
-                        return False
-                    
-                    connection.commit()
-                    logger.info(
-                        f"Successfully updated request_progress_log and request_log to {status} "
-                        f"for Request_Id={request_id}, account_num={account_num}"
-                    )
-                    return True
-                
-                except mysql.connector.Error as db_err:
+                if cursor.rowcount != 1:
                     error_msg = (
-                        f"Database error during update for Request_Id={request_id}, "
-                        f"account_num={account_num}: {str(db_err)} (errno: {db_err.errno})"
+                        f"No rows updated in request_progress_log for Request_Id={request_id}, "
+                        f"account_num={account_num}. Ensure row exists with Request_Status='Open'."
                     )
-                    logger.error(error_msg)
-                    connection.rollback()
+                    logger.warning(error_msg)
+                    if close_connection:
+                        connection.rollback()
                     return False
                 
-                finally:
-                    cursor.close()
+                # Update request_log
+                request_log_query = """
+                    UPDATE request_log
+                    SET Request_Status = %s, 
+                        Request_Status_Dtm = NOW(),
+                        Request_Status_Description = %s
+                    WHERE Request_Id = %s AND account_num = %s AND Request_Status = 'Open'
+                """
+                cursor.execute(request_log_query, (
+                    status, 
+                    'Monitoring cancellation completed' if status == 'Completed' else 'Error in cancellation process',
+                    request_id, 
+                    account_num
+                ))
+                
+                if cursor.rowcount != 1:
+                    error_msg = (
+                        f"No rows updated in request_log for Request_Id={request_id}, "
+                        f"account_num={account_num}. Ensure row exists with Request_Status='Open'."
+                    )
+                    logger.warning(error_msg)
+                    if close_connection:
+                        connection.rollback()
+                    return False
+                
+                if close_connection:
+                    connection.commit()
+                logger.info(
+                    f"Successfully updated request_progress_log and request_log to {status} "
+                    f"for Request_Id={request_id}, account_num={account_num}"
+                )
+                return True
+            
+            except mysql.connector.Error as db_err:
+                error_msg = (
+                    f"Database error during update for Request_Id={request_id}, "
+                    f"account_num={account_num}: {str(db_err)} (errno: {db_err.errno})"
+                )
+                logger.error(error_msg)
+                if close_connection:
+                    connection.rollback()
+                return False
+            
+            finally:
+                cursor.close()
         
         except DatabaseConnectionError as dce:
             logger.error(f"Connection error: {str(dce)}")
@@ -383,6 +393,179 @@ class MonitorPayment:
                 f"Request_Id={request_id}, account_num={account_num}: {str(e)}"
             )
             logger.error(error_msg)
+            return False
+
+    def cancel_monitoring_request(self, request_data):
+        """
+        Process a single cancellation request for Order_Id = 3 through all tables.
+        
+        Args:
+            request_data (dict): Data from request_progress_log
+            
+        Returns:
+            bool: True if all steps completed successfully, False otherwise
+        """
+        request_id = request_data.get('Request_Id')
+        account_num = request_data.get('account_num')
+        case_id = request_data.get('case_id')
+        
+        if not request_id or not account_num or not case_id:
+            logger.warning("Skipping cancellation request - missing Request_Id, account_num, or case_id")
+            return False
+        
+        logger.info(f"Processing cancellation request {request_id} for account {account_num}, case {case_id}")
+        
+        try:
+            with MySQLConnectionSingleton() as db_connection:
+                connection = db_connection.get_connection()
+                if not connection:
+                    raise DatabaseConnectionError("Failed to connect to MySQL for cancellation process.")
+                
+                # Ensure connection is alive
+                connection.ping(reconnect=True)
+                
+                try:
+                    # Step 1: Get request_log_details
+                    request_details = self.get_request_details(request_id, connection)
+                    if not request_details:
+                        logger.warning(f"No details found in request_log_details for Request_Id={request_id}")
+                        return False
+                    
+                    # Step 2: Check if record exists in process_monitor_progress_log
+                    cursor = connection.cursor(dictionary=True)
+                    check_query = """
+                        SELECT Monitor_Id FROM process_monitor_progress_log 
+                        WHERE case_id = %s AND account_num = %s
+                    """
+                    cursor.execute(check_query, (case_id, account_num))
+                    existing_record = cursor.fetchone()
+                    cursor.close()
+                    
+                    if not existing_record:
+                        logger.warning(f"No record found in process_monitor_progress_log for case_id={case_id}, account_num={account_num}")
+                        return False
+                    
+                    monitor_id = existing_record['Monitor_Id']
+                    
+                    # Step 3: Update process_monitor_progress_log
+                    now = datetime.now()
+                    next_monitor_dtm = now + timedelta(hours=self.monitoring_interval_hours)
+                    cursor = connection.cursor(dictionary=True)
+                    update_progress_query = """
+                        UPDATE process_monitor_progress_log
+                        SET Request_Id = %s,
+                            last_monitored_dtm = %s,
+                            next_monitor_dtm = %s,
+                            Order_Id = %s,
+                            monitor_status = 'Cancelled',
+                            monitor_status_dtm = %s,
+                            monitor_status_description = 'Cancellation processed'
+                        WHERE Monitor_Id = %s AND case_id = %s AND account_num = %s
+                    """
+                    cursor.execute(update_progress_query, (
+                        request_id,
+                        now,
+                        next_monitor_dtm,
+                        request_data.get('Order_Id'),
+                        now,
+                        monitor_id,
+                        case_id,
+                        account_num
+                    ))
+                    
+                    if cursor.rowcount != 1:
+                        logger.warning(f"Failed to update process_monitor_progress_log for Monitor_Id={monitor_id}")
+                        connection.rollback()
+                        cursor.close()
+                        return False
+                    cursor.close()
+                    
+                    # Step 4: Update process_monitor_log
+                    cursor = connection.cursor(dictionary=True)
+                    update_monitor_query = """
+                        UPDATE process_monitor_log
+                        SET Request_Id = %s,
+                            last_monitored_dtm = %s,
+                            next_monitor_dtm = %s,
+                            Order_Id = %s,
+                            monitor_status = 'Cancelled',
+                            monitor_status_dtm = %s,
+                            monitor_status_description = 'Cancellation processed'
+                        WHERE Monitor_Id = %s AND case_id = %s AND account_num = %s
+                    """
+                    cursor.execute(update_monitor_query, (
+                        request_id,
+                        now,
+                        next_monitor_dtm,
+                        request_data.get('Order_Id'),
+                        now,
+                        monitor_id,
+                        case_id,
+                        account_num
+                    ))
+                    
+                    if cursor.rowcount != 1:
+                        logger.warning(f"Failed to update process_monitor_log for Monitor_Id={monitor_id}")
+                        connection.rollback()
+                        cursor.close()
+                        return False
+                    cursor.close()
+                    
+                    # Step 5: Update process_monitor_details
+                    cursor = connection.cursor(dictionary=True)
+                    update_details_query = """
+                        UPDATE process_monitor_details
+                        SET para_1 = %s,
+                            para_2 = %s,
+                            para_3 = NULL,
+                            para_4 = NULL,
+                            para_5 = NULL,
+                            para_6 = NULL,
+                            para_7 = NULL,
+                            para_8 = NULL,
+                            para_9 = NULL,
+                            para_10 = NULL
+                        WHERE Monitor_Id = %s
+                    """
+                    cursor.execute(update_details_query, (
+                        request_details.get('para_1'),
+                        request_details.get('para_2'),
+                        monitor_id
+                    ))
+                    
+                    if cursor.rowcount != 1:
+                        logger.warning(f"Failed to update process_monitor_details for Monitor_Id={monitor_id}")
+                        connection.rollback()
+                        cursor.close()
+                        return False
+                    cursor.close()
+                    
+                    # Step 6: Update request_progress_log and request_log status
+                    status_success = self.update_request_progress_status(request_id, account_num, status="Completed", connection=connection)
+                    if not status_success:
+                        connection.rollback()
+                        return False
+                    
+                    connection.commit()
+                    logger.info(f"Successfully processed cancellation for Request_Id={request_id}, account_num={account_num}")
+                    return True
+                
+                except mysql.connector.Error as db_err:
+                    logger.error(f"Database error during cancellation process: {str(db_err)}")
+                    connection.rollback()
+                    return False
+                
+                except Exception as e:
+                    logger.error(f"Unexpected error in cancellation process for Request_Id={request_id}: {str(e)}")
+                    connection.rollback()
+                    return False
+        
+        except DatabaseConnectionError as dce:
+            logger.error(f"Connection error: {str(dce)}")
+            return False
+        
+        except Exception as e:
+            logger.error(f"Unexpected error in cancellation process for Request_Id={request_id}: {str(e)}")
             return False
 
     def process_monitoring_request(self, request_data):
@@ -415,7 +598,12 @@ class MonitorPayment:
             return False
         
         # Step 3: Create process_monitor_details entry
-        details_success = self.create_process_monitor_details(monitor_id, request_id)
+        with MySQLConnectionSingleton() as db_connection:
+            connection = db_connection.get_connection()
+            if not connection:
+                raise DatabaseConnectionError("Failed to connect to MySQL for creating monitor details.")
+            details_success = self.create_process_monitor_details(monitor_id, request_id, connection)
+        
         if not details_success:
             return False
         
@@ -453,42 +641,3 @@ class MonitorPayment:
         
         logger.info(f"Completed processing: {success_count} successful, {error_count} failed")
         return (success_count, error_count)
-
-    def cancel_monitoring_request(self, request_data):
-        """
-        Process a single cancellation request for Order_Id = 3 through all tables.
-        
-        Args:
-            request_data (dict): Data from request_progress_log
-            
-        Returns:
-            bool: True if all steps completed successfully, False otherwise
-        """
-        request_id = request_data.get('Request_Id')
-        account_num = request_data.get('account_num')
-        
-        if not request_id or not account_num:
-            logger.warning("Skipping cancellation request - missing Request_Id or account_num")
-            return False
-        
-        logger.info(f"Processing cancellation request {request_id} for account {account_num}")
-        
-        # Step 1: Create process_monitor_log entry
-        monitor_id = self.create_process_monitor_log(request_data)
-        if not monitor_id:
-            return False
-        
-        # Step 2: Create process_monitor_progress_log entry
-        progress_success = self.create_process_monitor_progress_log(monitor_id, request_data)
-        if not progress_success:
-            return False
-        
-        # Step 3: Create process_monitor_details entry
-        details_success = self.create_process_monitor_details(monitor_id, request_id)
-        if not details_success:
-            return False
-        
-        # Step 4: Update request_progress_log and request_log status
-        status_success = self.update_request_progress_status(request_id, account_num, status="Cancelled")
-        
-        return status_success

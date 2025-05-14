@@ -365,9 +365,9 @@ class Process_request:
         Returns:
             None
         """
-        match option: #TODO: See if can this switch case remove and just get the option directly.
+        match option:
             case 1:
-                self.customer_details_for_case_registration(rows) #TODO: Change these methods into actual order process names.
+                self.customer_details_for_case_registration(rows)
             case 2:
                 self.monitor_payment(rows)
             case 3:
