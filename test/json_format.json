@@ -1,0 +1,135 @@
+{
+    "Doc_Version": 1.0,
+    "Incident_Id": 223134,
+    "Account_Num": "0000003746",
+    "Arrears": 1000,
+    "arrears_band": "",
+    "Bss_Arrears_Amount": 0,
+    "Last_Bss_Reading_Date": "1900-01-01T00:00:00.000Z",
+    "Created_By": "drs_admin",
+    "Created_Dtm": "2025-05-14T05:32:18.000Z",
+    "Incident_Status": "",
+    "Incident_Status_Dtm": "2025-05-14T05:32:18.000Z",
+    "Status_Description": "",
+    "File_Name_Dump": "",
+    "Batch_Id": "",
+    "Batch_Id_Tag_Dtm": "2025-05-14T05:32:18.000Z",
+    "External_Data_Update_On": "2025-05-14T05:32:18.000Z",
+    "Filtered_Reason": "",
+    "Export_On": "2025-05-14T05:32:18.000Z",
+    "File_Name_Rejected": "",
+    "Rejected_Reason": "",
+    "Incident_Forwarded_By": "",
+    "Incident_Forwarded_On": "2025-05-14T05:32:18.000Z",
+    "Accounts_Details": [
+        {
+            "Id": 0,
+            "DRCMood": "",
+            "Account_Num": "0000003746",
+            "Account_Status": "",
+            "OutstandingBalance": 0
+        }
+    ],
+    "Contact_Details": [
+        {
+            "Contact_Type": "email",
+            "Contact": "",
+            "Create_Dtm": "2025-02-22T00:00:00.000Z",
+            "Create_By": "drs_admin"
+        },
+        {
+            "Contact_Type": "mobile",
+            "Contact": "0773320486",
+            "Create_Dtm": "2025-02-22T00:00:00.000Z",
+            "Create_By": "drs_admin"
+        }
+    ],
+    "Product_Details": [
+        {
+            "Product_Label": "1-DQLZNH6",
+            "Customer_Ref": "CR000000374",
+            "Product_Seq": 23,
+            "Equipment_Ownership": "",
+            "Product_Id": "1-2OPD-327",
+            "Product_Name": "E_SLT Peo TV Service",
+            "Product_Status": "Inactive",
+            "Effective_Dtm": "1987-06-23T00:00:00.000Z",
+            "Service_Address": "202/18, Manamendra Mw, , Ukwattha, Avissawella, Colombo, Western, Sri Lanka, 10700",
+            "Cat": "Individual",
+            "Db_Cpe_Status": "",
+            "Received_List_Cpe_Status": "",
+            "Service_Type": "E-IPTV FTTH",
+            "Region": "Avissawella",
+            "Province": "Western"
+        },
+        {
+            "Product_Label": "1-DQLZNH6",
+            "Customer_Ref": "CR000000374",
+            "Product_Seq": 20,
+            "Equipment_Ownership": "",
+            "Product_Id": "1-2X4Z-505",
+            "Product_Name": "AB Fiber Access Bearer",
+            "Product_Status": "Inactive",
+            "Effective_Dtm": "1987-06-23T00:00:00.000Z",
+            "Service_Address": "202/18, Manamendra Mw, , Ukwattha, Avissawella, Colombo, Western, Sri Lanka, 10700",
+            "Cat": "Individual",
+            "Db_Cpe_Status": "",
+            "Received_List_Cpe_Status": "",
+            "Service_Type": "AB-FTTH",
+            "Region": "Avissawella",
+            "Province": "Western"
+        }
+    ],
+    "Customer_Details": {
+        "Customer_Name": "Mrs B . G . S . Ganegoda",
+        "Company_Name": "",
+        "Company_Registry_Number": "",
+        "Full_Address": "202/18, Manamendra Mw, , Ukwattha, Avissawella, Colombo, Western, Sri Lanka, 10700",
+        "Zip_Code": "10700",
+        "Customer_Type_Name": "",
+        "Nic": "None",
+        "Customer_Type_Id": 1,
+        "Customer_Type": "Individual-Residential",
+        "customer_ref": "CR000000374",
+        "Email_Address": ""
+    },
+    "Account_Details": {
+        "Account_Status": "OK",
+        "Acc_Effective_Dtm": "1987-06-23T00:00:00.000Z",
+        "Acc_Activate_Date": "1900-01-01T00:00:00.000Z",
+        "Credit_Class_Id": 1,
+        "Credit_Class_Name": "Residential - Low",
+        "Billing_Centre": "AWISSAWELLA",
+        "Customer_Segment": "05",
+        "Mobile_Contact_Tel": "",
+        "Daytime_Contact_Tel": "",
+        "Email_Address": "None",
+        "Last_Rated_Dtm": "1900-01-01T00:00:00.000Z"
+    },
+    "Last_Actions": [
+        {
+            "Billed_Seq": 114,
+            "Billed_Created": "2024-08-01T00:00:00.000Z",
+            "Payment_Seq": 114,
+            "Payment_Created": "2016-11-02T00:00:00.000Z",
+            "Payment_Money": 22567.0,
+            "Billed_Amount": 22567.0
+        }
+    ],
+    "Marketing_Details": [
+        {
+            "ACCOUNT_MANAGER": "",
+            "CONSUMER_MARKET": "",
+            "Informed_To": "",
+            "Informed_On": "1900-01-01T00:00:00.100Z"
+        }
+    ],
+    "Action": "",
+    "Validity_period": 0,
+    "Remark": "",
+    "updatedAt": "2025-05-14T05:32:18.000Z",
+    "Rejected_By": "",
+    "Rejected_Dtm": "2025-05-14T05:32:18.000Z",
+    "Arrears_Band": "",
+    "Source_Type": ""
+}

@@ -1,0 +1,50 @@
+// Get current system time
+SYSTEM_DATE = NOW - 1 minute
+
+1. INITIAL SETUP:
+   - Check if the "Incident extraction from data lake" operation is active in the `Process_Operation` table.
+     - IF active: Proceed to the next step.
+     - ELSE: Log an error response and terminate the process.
+
+2. PROCESS EXECUTION CONDITIONS:
+   - Check if the process should run:
+     - IF (end_dtm > SYSTEM_DATE OR end_dtm IS NULL) 
+       AND (Next_execution_dtm < SYSTEM_DATE):
+         - Proceed to PROCESS (Step 3).
+     - ELSE:
+         - IF end_dtm <= SYSTEM_DATE:
+             Log an error: "Process terminated due to end date."
+         - IF Next_execution_dtm >= SYSTEM_DATE:
+             Log a message: "Process scheduled for 'Next_execution_dtm'."
+
+3. PROCESS:
+   - Define the TIME_PERIOD:
+     TIME_PERIOD = Last_execution_dtm to SYSTEM_DATE
+
+   - Fetch data from the data lake:
+     - Retrieve `debt_cust_detail` and `debt_payment` records where `LOAD_DATE` falls within the TIME_PERIOD.
+     - Example: If TIME_PERIOD is 2024-01-08 06:31:41 to 2024-01-08 07:31:41, fetch records with `LOAD_DATE` in this range.
+
+   - Process incidents:
+     - Run the `incident_create.py` script to process incidents.
+     - Modify the script if necessary.
+
+   - ON SUCCESS:
+     - Update the `Process_Operation` table:
+       - Set `Last_execution_dtm` = SYSTEM_DATE
+       - Set `Next_execution_dtm` = SYSTEM_DATE + 60 minutes
+       - Increment `Process_Operation_Sequence`
+
+   - ON FAILURE:
+     - Log error details.
+
+4. SQL TABLE STRUCTURE:
+   CREATE TABLE Process_Operation (
+       Process_Operation_Sequence INT NOT NULL,
+       created_dtm DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+       Operation_name VARCHAR(255) NOT NULL,
+       execution_duration INT NOT NULL,
+       Next_execution_dtm DATETIME NOT NULL,
+       Last_execution_dtm DATETIME NOT NULL,
+       end_dtm DATETIME
+   );

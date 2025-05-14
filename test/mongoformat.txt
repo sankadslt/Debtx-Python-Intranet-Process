@@ -1,0 +1,64 @@
+{
+            "Doc_Version": 1.0,
+            "Incident_Id": self.incident_id,
+            "Account_Num": self.account_num,
+            "Arrears": 1000, #hard code for now 
+            "arrears_band": "",
+            "Bss_Arrears_Amount": 0,
+            "Last_Bss_Reading_Date": "1900-01-01T00:00:00.000Z",
+            "Created_By": "drs_admin",
+            "Created_Dtm": now,
+            "Incident_Status": "",
+            "Incident_Status_Dtm": now,
+            "Status_Description": "",
+            "File_Name_Dump": "",
+            "Batch_Id": "",
+            "Batch_Id_Tag_Dtm": now,
+            "External_Data_Update_On": now,
+            "Filtered_Reason": "",
+            "Export_On": now,
+            "File_Name_Rejected": "",
+            "Rejected_Reason": "",
+            "Incident_Forwarded_By": "",
+            "Incident_Forwarded_On": now,
+            "Accounts_Details":[
+                {
+                "Id":0,
+                "DRCMood":"",
+                "Account_Num":self.account_num,
+                "Account_Status":"",
+                "OutstandingBalance":0,
+                }
+            ]
+            ,
+            "Contact_Details": [],
+            "Product_Details": [],
+            "Customer_Details": {},
+            "Account_Details": {},
+            "Last_Actions": [
+                {
+                    "Billed_Seq": "",
+                    "Billed_Created": "",
+                    "Payment_Seq": 0,
+                    "Payment_Created": "",
+                    "Payment_Money": 0,
+                    "Billed_Amount": 0
+                }
+            ],
+            "Marketing_Details": [
+                {
+                    "ACCOUNT_MANAGER": "",
+                    "CONSUMER_MARKET": "",
+                    "Informed_To": "",
+                    "Informed_On": "1900-01-01T00:00:00.100Z"
+                }
+            ],
+            "Action": "",
+            "Validity_period": 0,
+            "Remark": "",
+            "updatedAt": now,
+            "Rejected_By": "",
+            "Rejected_Dtm": now,
+            "Arrears_Band": "",
+            "Source_Type": ""
+        }
