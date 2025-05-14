@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Time-Gapped Incident Processing System
 
 ## Overview
@@ -184,3 +185,7 @@ ERROR:incident_logger:Database connection error during incident processing: Fail
 ## Developed By
 [Tharindu Balasooriya] (tharindutsb@gmail.com) 
 
+=======
+# Debtx-Python-Intranet-Process
+This is main Finalize Intranet process
+>>>>>>> b872bca9216672fc230697b1966417b7d5d28fea
