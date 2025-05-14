@@ -66,7 +66,10 @@ class CreateIncident:
             "Doc_Version": 1.0,
             "Incident_Id": self.incident_id,
             "Account_Num": self.account_num,
+            "Customer_Ref": f"CR{self.account_num}",  # Generate Customer_Ref
             "Arrears": 1000,  # Hard-coded for now
+            "Bss_Arrears_Amount": 1000,  # Required by API
+            "Last_Bss_Reading_Date": now,  # Required by API
             "arrears_band": "",
             "Created_By": "drs_admin",
             "Created_Dtm": now,
@@ -135,7 +138,7 @@ class CreateIncident:
             "LOD_Final_Reminder": [],
             "Dispute": [],
             "Abnormal_Abs": [""]
-        } #TODO: Change the customer ref printing place in this json.
+        }
 
     def format_datetime_z(self, date_value):
         """
@@ -205,7 +208,7 @@ class CreateIncident:
                     seen_products = set()
                     for row in rows:
                         if not self.mongo_data["Customer_Details"]:
-                            customer_ref_value = row.get("CUSTOMER_REF", "") or "UNKNOWN"
+                            customer_ref_value = row.get("CUSTOMER_REF", "") or f"CR{self.account_num}"
                             self.mongo_data["Customer_Ref"] = customer_ref_value
 
                             if row.get("TECNICAL_CONTACT_EMAIL"):
@@ -243,16 +246,15 @@ class CreateIncident:
                                 "Zip_Code": row.get("ZIP_CODE", ""),
                                 "Customer_Type_Name": "",
                                 "Nic": str(row.get("NIC", "")),
-                                "Customer_Type_Id": int(row.get("CUSTOMER_TYPE_ID", 0)),
-                                "Customer_Type": row.get("CUSTOMER_TYPE", ""),
-                                "customer_ref": row.get("CUSTOMER_REF", "")
+                                "Customer_Type_Id": str(row.get("CUSTOMER_TYPE_ID", 0)),  # Convert to string
+                                "Customer_Type": row.get("CUSTOMER_TYPE", "")
                             }
 
                             self.mongo_data["Account_Details"] = {
                                 "Account_Status": row.get("ACCOUNT_STATUS_BSS", ""),
                                 "Acc_Effective_Dtm": self.format_datetime_z(row.get("ACCOUNT_EFFECTIVE_DTM_BSS")),
                                 "Acc_Activate_Date": "1900-01-01T00:00:00.000Z",
-                                "Credit_Class_Id": int(row.get("CREDIT_CLASS_ID", 0)),
+                                "Credit_Class_Id": str(row.get("CREDIT_CLASS_ID", 0)),  # Convert to string
                                 "Credit_Class_Name": row.get("CREDIT_CLASS_NAME", ""),
                                 "Billing_Centre": row.get("BILLING_CENTER_NAME", ""),
                                 "Customer_Segment": row.get("CUSTOMER_SEGMENT_ID", ""),
@@ -264,9 +266,9 @@ class CreateIncident:
 
                             if row.get("LAST_PAYMENT_DAT"):
                                 self.mongo_data["Last_Actions"] = [{
-                                    "Billed_Seq": int(row.get("LAST_BILL_SEQ", 0)),
+                                    "Billed_Seq": str(row.get("LAST_BILL_SEQ", 0)),  # Convert to string
                                     "Billed_Created": self.format_datetime_z(row.get("LAST_BILL_DTM")),
-                                    "Payment_Seq": 0,
+                                    "Payment_Seq": str(row.get("LAST_PAYMENT_SEQ", 0)),  # Convert to string
                                     "Payment_Created": self.format_datetime_z(row.get("LAST_PAYMENT_DAT")),
                                     "Payment_Money": float(row["LAST_PAYMENT_MNY"]) if row.get("LAST_PAYMENT_MNY") else 0.0,
                                     "Billed_Amount": float(row["LAST_PAYMENT_MNY"]) if row.get("LAST_PAYMENT_MNY") else 0.0
@@ -349,9 +351,9 @@ class CreateIncident:
                         )
 
                         self.mongo_data["Last_Actions"] = [{
-                            "Billed_Seq": int(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),
+                            "Billed_Seq": str(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),  # Convert to string
                             "Billed_Created": billed_date,
-                            "Payment_Seq": int(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),
+                            "Payment_Seq": str(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),  # Convert to string
                             "Payment_Created": payment_date,
                             "Payment_Money": float(payment.get("AP_ACCOUNT_PAYMENT_MNY", 0)),
                             "Billed_Amount": float(payment.get("AP_ACCOUNT_PAYMENT_MNY", 0))
@@ -367,16 +369,61 @@ class CreateIncident:
 
     def format_json_object(self):
         """
-        Formats the document data into a JSON string.
+        Formats the document data into a JSON string, ensuring compatibility with API model.
 
         Returns:
             str: A formatted JSON string with proper indentation and data conversions.
         """
+        def to_camel_case(snake_str):
+            """Convert snake_case or uppercase to camelCase."""
+            components = snake_str.lower().split('_')
+            return components[0] + ''.join(x.capitalize() for x in components[1:])
+
         json_data = json.loads(json.dumps(self.mongo_data, default=self.json_serializer()))
+
+        # Convert specific fields to strings
         if "Customer_Details" in json_data:
             json_data["Customer_Details"]["Nic"] = str(json_data["Customer_Details"].get("Nic", ""))
+            json_data["Customer_Details"]["Customer_Type_Id"] = str(json_data["Customer_Details"].get("Customer_Type_Id", ""))
         if "Account_Details" in json_data:
             json_data["Account_Details"]["Email_Address"] = str(json_data["Account_Details"].get("Email_Address", ""))
+            json_data["Account_Details"]["Credit_Class_Id"] = str(json_data["Account_Details"].get("Credit_Class_Id", ""))
+
+        # Transform Last_Actions to match API model
+        if "Last_Actions" in json_data:
+            transformed_actions = []
+            for action in json_data["Last_Actions"]:
+                transformed_action = {
+                    to_camel_case(key): value for key, value in action.items()
+                }
+                transformed_actions.append(transformed_action)
+            json_data["Last_Actions"] = transformed_actions
+
+        # Transform Marketing_Details to match API model
+        if "Marketing_Details" in json_data:
+            transformed_marketing = []
+            for marketing in json_data["Marketing_Details"]:
+                transformed_marketing_item = {
+                    to_camel_case(key): value for key, value in marketing.items()
+                }
+                transformed_marketing.append(transformed_marketing_item)
+            json_data["Marketing_Details"] = transformed_marketing
+
+        # Remove Accounts_Details (not in API model) and add Account_Cross_Details
+        if "Accounts_Details" in json_data:
+            account_cross_details = [
+                {
+                    "Incident_Id": self.incident_id,
+                    "Case_Id": None,
+                    "Account_Num": detail["Account_Num"],
+                    "Account_Status": detail["Account_Status"],
+                    "Outstanding_Balance": float(detail["OutstandingBalance"])
+                }
+                for detail in json_data["Accounts_Details"]
+            ]
+            json_data["Account_Cross_Details"] = account_cross_details
+            del json_data["Accounts_Details"]
+
         return json.dumps(json_data, indent=4)
 
     def json_serializer(self):
@@ -394,7 +441,7 @@ class CreateIncident:
             if isinstance(obj, Decimal):
                 return float(obj) if obj % 1 else int(obj)
             if obj is None or str(obj).lower() == "none":
-                return ""
+                return None  # Changed to None to match API model
             if isinstance(obj, (int, float)):
                 return obj
             return str(obj)
