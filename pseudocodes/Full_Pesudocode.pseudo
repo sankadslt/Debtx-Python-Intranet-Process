@@ -1,0 +1,531 @@
+Main.py
+
+BEGIN
+    Initialize SingletonLogger and get logger instance ("appLogger")
+    
+    IF __name__ == "__main__" THEN
+        TRY
+            Log "Starting Order Processing System"
+            Create instance of Process_request (execute_process)
+            Call execute_process.run_process()
+        CATCH Exception as e
+            Log critical error: "Fatal error: {e}"
+        FINALLY
+            Log "System shutdown"
+    END IF
+END
+
+Process_request Class (RequestManipulation.py)
+
+CLASS Process_request
+    CONSTRUCTOR
+        Log "MySQL connection initialization attempted"
+    END CONSTRUCTOR
+
+    METHOD run_process
+        Log "Starting Order Processor"
+        WHILE True
+            TRY
+                Fetch open orders from request_progress_log where Request_Status = 'Open'
+                IF no open orders THEN
+                    Log "No open orders found. Waiting..."
+                    Sleep for 5 seconds
+                    CONTINUE
+                END IF
+                Log "Found {number} open orders"
+                FOR option FROM 1 TO 4
+                    Filter rows where Order_Id equals option
+                    IF rows exist THEN
+                        Log "Processing {number} rows for Order_Id {option}"
+                        Call process_selected_option(option, filtered_rows)
+                    END IF
+                END FOR
+                Sleep for 1 second
+            CATCH KeyboardInterrupt
+                Log "Program terminated by user"
+                BREAK
+            CATCH Exception as e
+                Log "Unexpected error: {e}"
+                Sleep for 5 seconds
+            END TRY
+        END WHILE
+    END METHOD
+
+    METHOD process_selected_option(option, rows)
+        CASE option
+            WHEN 1: Call customer_details_for_case_registration(rows)
+            WHEN 2: Call monitor_payment(rows)
+            WHEN 3: Call monitor_payment_cancel(rows)
+            WHEN 4: Call close_monitor_if_no_transaction(rows)
+            DEFAULT: Log "Invalid option selected: {option}"
+        END CASE
+    END METHOD
+
+    METHOD customer_details_for_case_registration(rows)
+        Initialize processed_count = 0, error_count = 0
+        FOR each row in rows
+            IF row.Order_Id == 1 THEN
+                IF process_single_document(row) THEN
+                    Increment processed_count
+                ELSE
+                    Increment error_count
+                END IF
+                Sleep for 1 second
+            END IF
+        END FOR
+        Log "Successfully Processed {processed_count} document(s), {error_count} errors"
+        RETURN processed_count, error_count
+    END METHOD
+
+    METHOD process_single_document(row)
+        TRY
+            Get request_id and account_number from row
+            IF request_id or account_number is missing THEN
+                Log warning and RETURN False
+            END IF
+            Convert request_id to integer
+            Connect to MySQL using MySQLConnectionSingleton
+            Fetch incident_id from request_log_details where Request_Id = request_id
+            IF no incident_id THEN
+                Log warning and RETURN False
+            END IF
+            RETURN process_case(account_number, incident_id, request_id)
+        CATCH Exception as e
+            Log error and RETURN False
+        END TRY
+    END METHOD
+
+    METHOD process_case(account_number, incident_id, request_id)
+        TRY
+            Create CreateIncident instance with account_number, incident_id
+            Call process_incident() and store success status
+            Set status = "Completed" if success, else "Error"
+            Connect to MySQL using MySQLConnectionSingleton
+            Update request_progress_log with status, Request_Id, account_number
+            IF update successful THEN
+                Log success
+            ELSE
+                Log warning and RETURN False
+            END IF
+            Update request_log with status, Request_Id, account_number
+            IF update successful THEN
+                Log success and RETURN success
+            ELSE
+                Log warning and RETURN False
+            END IF
+        CATCH Exception as e
+            Log error and RETURN False
+        END TRY
+    END METHOD
+
+    METHOD monitor_payment(rows)
+        Initialize processed_count = 0, error_count = 0
+        Create MonitorPayment instance
+        FOR each row in rows
+            IF row.Order_Id == 2 THEN
+                IF monitor_payment.process_monitoring_request(row) THEN
+                    Increment processed_count
+                ELSE
+                    Increment error_count
+                END IF
+                Sleep for 1 second
+            END IF
+        END FOR
+        Log "Processed {processed_count} documents, {error_count} errors"
+        RETURN processed_count, error_count
+    END METHOD
+
+    METHOD monitor_payment_cancel(rows)
+        Initialize processed_count = 0, error_count = 0
+        Create MonitorPayment instance
+        FOR each row in rows
+            IF row.Order_Id == 3 THEN
+                IF monitor_payment.cancel_monitoring_request(row) THEN
+                    Increment processed_count
+                ELSE
+                    Increment error_count
+                END IF
+                Sleep for 1 second
+            END IF
+        END FOR
+        Log "Processed {processed_count} documents, {error_count} errors"
+        RETURN processed_count, error_count
+    END METHOD
+
+    METHOD close_monitor_if_no_transaction(rows)
+        Initialize processed_count = 0, error_count = 0
+        Create MonitorPayment instance
+        FOR each row in rows
+            IF row.Order_Id == 4 THEN
+                Get request_id, account_number, case_id from row
+                IF any field missing THEN
+                    Log warning, increment error_count, CONTINUE
+                END IF
+                TRY
+                    Connect to MySQL
+                    Insert into process_monitor_log with status 'Closed'
+                    Get monitor_id
+                    Insert into process_monitor_progress_log with status 'Closed'
+                    Copy request_log_details to process_monitor_details
+                    Update request_progress_log and request_log to "Completed"
+                    IF all steps successful THEN
+                        Commit transaction
+                        Increment processed_count
+                    ELSE
+                        Rollback transaction
+                        Increment error_count
+                    END IF
+                CATCH Exception
+                    Log error, rollback transaction, increment error_count
+                END TRY
+                Sleep for 1 second
+            END IF
+        END FOR
+        Log "Processed {processed_count} documents, {error_count} errors"
+        RETURN processed_count, error_count
+    END METHOD
+
+    METHOD get_open_orders
+        TRY
+            Connect to MySQL using MySQLConnectionSingleton
+            Fetch rows from request_progress_log where Request_Status = 'Open'
+            Log number of rows fetched
+            RETURN rows
+        CATCH Exception as e
+            Log error and RETURN empty list
+        END TRY
+    END METHOD
+END CLASS
+
+3. CreateIncident Class (jsonMapping.py)
+
+CLASS CreateIncident
+    CONSTRUCTOR(account_num, incident_id)
+        TRY
+            Validate account_num and incident_id are not None
+            Convert account_num to string, incident_id to integer
+            Initialize mongo_data with initialize_mongo_doc()
+        CATCH Exception as e
+            RAISE ValueError("Invalid input: {e}")
+        END TRY
+    END CONSTRUCTOR
+
+    METHOD initialize_mongo_doc
+        Set current timestamp (now) in ISO 8601 format
+        RETURN dictionary with default incident document structure
+            Include fields: Doc_Version, Incident_Id, Account_Num, Customer_Ref, Arrears, etc.
+            Initialize nested structures: Accounts_Details, Contact_Details, Product_Details, etc.
+    END METHOD
+
+    METHOD format_datetime_z(date_value)
+        IF date_value is empty THEN
+            RETURN "1900-01-01T00:00:00.000Z"
+        END IF
+        IF date_value is datetime THEN
+            RETURN formatted ISO 8601 string with ".000Z"
+        END IF
+        IF date_value is date THEN
+            Convert to datetime and RETURN formatted ISO 8601 string
+        END IF
+        TRY
+            Parse string as datetime and RETURN formatted ISO 8601 string
+        CATCH Exception
+            RETURN "1900-01-01T00:00:00.000Z"
+        END TRY
+    END METHOD
+
+    METHOD read_customer_details
+        TRY
+            Log "Reading customer details for account number: {account_num}"
+            Connect to MySQL using MySQLConnectionSingleton
+            Execute query to fetch customer details from debt_cust_detail
+            IF no rows THEN
+                Log warning and RETURN "no_data"
+            END IF
+            Initialize seen_products set
+            FOR each row in rows
+                IF Customer_Details not set THEN
+                    Set Customer_Ref
+                    Add email, mobile, work contacts to Contact_Details
+                    Populate Customer_Details with name, address, NIC, etc.
+                    Populate Account_Details with status, effective date, etc.
+                    IF last payment date exists THEN
+                        Update Last_Actions with payment details
+                    END IF
+                END IF
+                IF product_id is new THEN
+                    Add to Product_Details with product info
+                    Add product_id to seen_products
+                END IF
+            END FOR
+            Log success and RETURN "success"
+        CATCH Exception as e
+            Log error and RAISE DataProcessingError
+        END TRY
+    END METHOD
+
+    METHOD get_payment_data
+        TRY
+            Log "Getting payment data for account: {account_num}"
+            Connect to MySQL using MySQLConnectionSingleton
+            Fetch latest payment from debt_payment
+            IF payment exists THEN
+                Fetch last bill date from debt_cust_detail
+                Format payment and bill dates
+                Update Last_Actions with payment details
+                Log success and RETURN "success"
+            ELSE
+                RETURN "failure"
+            END IF
+        CATCH Exception as e
+            Log error and RAISE DataProcessingError
+        END TRY
+    END METHOD
+
+    METHOD format_json_object
+        Define to_camel_case function to convert snake_case to camelCase
+        Serialize mongo_data to JSON with custom json_serializer
+        Convert specific fields (Nic, Customer_Type_Id, Email_Address, Credit_Class_Id) to strings
+        Transform Last_Actions and Marketing_Details keys to camelCase
+        Replace Accounts_Details with Account_Cross_Details
+        RETURN formatted JSON string with indentation
+    END METHOD
+
+    METHOD json_serializer
+        RETURN function that:
+            Converts datetime/date to ISO 8601 with ".000Z"
+            Converts Decimal to float or int
+            Converts None or "none" to None
+            Converts numbers to themselves
+            Converts others to strings
+    END METHOD
+
+    METHOD send_to_api(json_output, api_url)
+        TRY
+            Log "Sending data to API: {api_url}"
+            Set headers for JSON content
+            Send POST request with json_output
+            Log response status and text
+            IF response successful THEN
+                RETURN response JSON
+            ELSE
+                RAISE HTTPError
+            END IF
+        CATCH HTTPError or RequestException as e
+            Log error and RETURN None
+        END TRY
+    END METHOD
+
+    METHOD process_incident
+        TRY
+            Log "Processing incident {incident_id} for account {account_num}"
+            Call read_customer_details
+            IF status not "success" or no Customer_Details THEN
+                Log error and RETURN False
+            END IF
+            Call get_payment_data
+            IF payment_status not "success" THEN
+                Log warning
+            END IF
+            Generate json_output with format_json_object
+            Get API URL from Get_API_URL_Singleton
+            IF no API URL THEN
+                RAISE APIConfigError
+            END IF
+            Send json_output to API
+            IF no response THEN
+                RAISE IncidentCreationError
+            END IF
+            Log success and RETURN True
+        CATCH Exception as e
+            Log error and RETURN False
+        END TRY
+    END METHOD
+END CLASS
+
+4. MonitorPayment Class (MonitorPayment.py)
+
+CLASS MonitorPayment
+    CONSTRUCTOR
+        Log "MonitorPayment class initialized"
+        Set monitoring_interval_hours = 24
+    END CONSTRUCTOR
+
+    METHOD get_request_progress_data(order_id=2)
+        TRY
+            Connect to MySQL using MySQLConnectionSingleton
+            Fetch rows from request_progress_log where Order_Id = order_id and Request_Status = 'Open'
+            Log number of rows fetched
+            RETURN rows
+        CATCH Exception as e
+            Log error and RETURN empty list
+        END TRY
+    END METHOD
+
+    METHOD get_request_details(request_id, connection)
+        TRY
+            Execute query to fetch para_1 to para_10 from request_log_details
+            IF no result THEN
+                Log warning and RETURN None
+            END IF
+            Log success and RETURN result
+        CATCH Exception as e
+            Log error and RETURN None
+        END TRY
+    END METHOD
+
+    METHOD create_process_monitor_log(request_data)
+        TRY
+            Calculate now and next_monitor_dtm (now + 24 hours)
+            Connect to MySQL
+            Insert into process_monitor_log with request_data, status 'Open'
+            IF insert successful THEN
+                RETURN monitor_id
+            ELSE
+                Log warning and RETURN None
+            END IF
+        CATCH Exception as e
+            Log error and RETURN None
+        END TRY
+    END METHOD
+
+    METHOD create_process_monitor_progress_log(monitor_id, request_data)
+        TRY
+            Connect to MySQL
+            Fetch process_monitor_log record for monitor_id
+            IF no record THEN
+                Log warning and RETURN False
+            END IF
+            Insert into process_monitor_progress_log with monitor_log_data
+            IF insert successful THEN
+                Log success and RETURN True
+            ELSE
+                Log warning and RETURN False
+            END IF
+        CATCH Exception as e
+            Log error and RETURN False
+        END TRY
+    END METHOD
+
+    METHOD create_process_monitor_details(monitor_id, request_id, connection)
+        TRY
+            Get request details for request_id
+            IF no details THEN
+                RETURN False
+            END IF
+            Insert into process_monitor_details with details
+            IF insert successful THEN
+                Log success and RETURN True
+            ELSE
+                Log warning and RETURN False
+            END IF
+        CATCH Exception as e
+            Log error and RETURN False
+        END TRY
+    END METHOD
+
+    METHOD update_request_progress_status(request_id, account_num, status="Completed", connection=None)
+        TRY
+            IF no connection THEN
+                Connect to MySQL
+                Set close_connection = True
+            END IF
+            Update request_progress_log with status
+            IF update fails THEN
+                Log warning and RETURN False
+            END IF
+            Update request_log with status
+            IF update fails THEN
+                Log warning and RETURN False
+            END IF
+            IF close_connection THEN
+                Commit transaction
+            END IF
+            Log success and RETURN True
+        CATCH Exception as e
+            Log error and RETURN False
+        END TRY
+    END METHOD
+
+    METHOD cancel_monitoring_request(request_data)
+        TRY
+            Get request_id, account_num, case_id from request_data
+            IF any missing THEN
+                Log warning and RETURN False
+            END IF
+            Connect to MySQL
+            Get request_log_details
+            IF no details THEN
+                RETURN False
+            END IF
+            Check process_monitor_progress_log for case_id, account_num
+            IF no record THEN
+                RETURN False
+            END IF
+            Update process_monitor_progress_log to 'Cancelled'
+            IF update fails THEN
+                Rollback and RETURN False
+            END IF
+            Update process_monitor_log to 'Cancelled'
+            IF update fails THEN
+                Rollback and RETURN False
+            END IF
+            Update process_monitor_details with para_1, para_2
+            IF update fails THEN
+                Rollback and RETURN False
+            END IF
+            Update request_progress_log and request_log to "Completed"
+            IF update fails THEN
+                Rollback and RETURN False
+            END IF
+            Commit transaction
+            Log success and RETURN True
+        CATCH Exception as e
+            Log error, rollback, and RETURN False
+        END TRY
+    END METHOD
+
+    METHOD process_monitoring_request(request_data)
+        TRY
+            Get request_id, account_num from request_data
+            IF any missing THEN
+                Log warning and RETURN False
+            END IF
+            Create process_monitor_log entry
+            IF fails THEN
+                RETURN False
+            END IF
+            Create process_monitor_progress_log entry
+            IF fails THEN
+                RETURN False
+            END IF
+            Create process_monitor_details entry
+            IF fails THEN
+                RETURN False
+            END IF
+            Update request_progress_log status
+            RETURN update success
+        CATCH Exception as e
+            Log error and RETURN False
+        END TRY
+    END METHOD
+
+    METHOD process_all_monitoring_requests
+        Initialize success_count = 0, error_count = 0
+        Fetch open monitoring requests (Order_Id = 2)
+        IF no requests THEN
+            Log "No open monitoring requests found"
+            RETURN (0, 0)
+        END IF
+        FOR each request
+            IF process_monitoring_request(request) THEN
+                Increment success_count
+            ELSE
+                Increment error_count
+            END IF
+            Sleep for 0.1 seconds
+        END FOR
+        Log "Completed processing: {success_count} successful, {error_count} failed"
+        RETURN (success_count, error_count)
+    END METHOD
+END CLASS

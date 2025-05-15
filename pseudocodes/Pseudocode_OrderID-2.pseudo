@@ -1,0 +1,281 @@
+Pseudocode for Order_Id = 2 (Payment Monitoring)
+1. Main Processing Loop (RequestManipulation.py: run_process)
+METHOD run_process
+    Log "Starting Order Processor"
+    WHILE True
+        TRY
+            Call get_open_orders to fetch rows from request_progress_log where Request_Status = 'Open'
+            IF no open orders THEN
+                Log "No open orders found. Waiting..."
+                Sleep for 5 seconds
+                CONTINUE
+            END IF
+            Log "Found {number} open orders"
+            FOR option FROM 1 TO 4
+                IF option == 2 THEN
+                    Filter rows where Order_Id == 2
+                    IF rows exist THEN
+                        Log "Processing {number} rows for Order_Id 2"
+                        Call monitor_payment(filtered_rows)
+                    END IF
+                END IF
+            END FOR
+            Sleep for 1 second
+        CATCH KeyboardInterrupt
+            Log "Program terminated by user"
+            BREAK
+        CATCH Exception as e
+            Log "Unexpected error: {e}"
+            Sleep for 5 seconds
+        END TRY
+    END WHILE
+END METHOD
+
+2. Fetching Open Orders (RequestManipulation.py: get_open_orders)
+METHOD get_open_orders
+    TRY
+        Connect to MySQL using MySQLConnectionSingleton
+        Execute query: SELECT * FROM request_progress_log WHERE Request_Status = 'Open'
+        Fetch all rows
+        Log "Fetched {number} open orders from request_progress_log"
+        RETURN rows
+    CATCH Exception as e
+        Log "Error fetching open orders: {e}"
+        RETURN empty list
+    END TRY
+END METHOD
+
+3. Processing Payment Monitoring (RequestManipulation.py: monitor_payment)
+METHOD monitor_payment(rows)
+    Log "Processing option 2 - Monitor Payment"
+    Initialize processed_count = 0
+    Initialize error_count = 0
+    Create MonitorPayment instance (monitor_payment)
+    FOR each row in rows
+        IF row.Order_Id == 2 THEN
+            IF monitor_payment.process_monitoring_request(row) THEN
+                Increment processed_count
+            ELSE
+                Increment error_count
+            END IF
+            Sleep for 1 second
+        END IF
+    END FOR
+    Log "Processed {processed_count} documents, {error_count} errors"
+    RETURN processed_count, error_count
+END METHOD
+
+4. MonitorPayment Class (MonitorPayment.py)
+CLASS MonitorPayment
+    CONSTRUCTOR
+        Log "MonitorPayment class initialized"
+        Set monitoring_interval_hours = 24
+    END CONSTRUCTOR
+
+    METHOD process_monitoring_request(request_data)
+        TRY
+            Get request_id from request_data['Request_Id']
+            Get account_num from request_data['account_num']
+            IF request_id is missing OR account_num is missing THEN
+                Log "Skipping request - missing Request_Id or account_num"
+                RETURN False
+            END IF
+            Log "Processing monitoring request {request_id} for account {account_num}"
+            Call create_process_monitor_log(request_data)
+            IF no monitor_id returned THEN
+                RETURN False
+            END IF
+            Set monitor_id = result
+            Call create_process_monitor_progress_log(monitor_id, request_data)
+            IF not successful THEN
+                RETURN False
+            END IF
+            Connect to MySQL using MySQLConnectionSingleton
+            IF connection fails THEN
+                RAISE DatabaseConnectionError "Failed to connect to MySQL for creating monitor details"
+            END IF
+            Call create_process_monitor_details(monitor_id, request_id, connection)
+            IF not successful THEN
+                RETURN False
+            END IF
+            Call update_request_progress_status(request_id, account_num)
+            RETURN update success
+        CATCH Exception as e
+            Log "Unexpected error in processing monitoring request for Request_Id={request_id}: {e}"
+            RETURN False
+        END TRY
+    END METHOD
+
+    METHOD create_process_monitor_log(request_data)
+        TRY
+            Set now = current timestamp
+            Set next_monitor_dtm = now + monitoring_interval_hours (24 hours)
+            Connect to MySQL using MySQLConnectionSingleton
+            IF connection fails THEN
+                RAISE DatabaseConnectionError "Failed to connect to MySQL for creating monitor log"
+            END IF
+            Create dictionary cursor
+            Execute query: INSERT INTO process_monitor_log (
+                case_id, Request_Id, last_monitored_dtm, next_monitor_dtm,
+                Order_Id, account_num, Expire_Dtm, monitor_status,
+                monitor_status_dtm, monitor_status_description
+            ) VALUES (
+                request_data['case_id'], request_data['Request_Id'], now, next_monitor_dtm,
+                request_data['Order_Id'], request_data['account_num'], NULL, 'Open',
+                now, 'Initial monitoring setup'
+            )
+            Commit transaction
+            IF rowcount == 1 THEN
+                Set monitor_id = last inserted id
+                Log "Created process_monitor_log record with Monitor_Id={monitor_id}"
+                RETURN monitor_id
+            ELSE
+                Log "Failed to create process_monitor_log record"
+                RETURN None
+            END IF
+        CATCH Exception as e
+            Log "Error creating process_monitor_log record: {e}"
+            RETURN None
+        END TRY
+    END METHOD
+
+    METHOD create_process_monitor_progress_log(monitor_id, request_data)
+        TRY
+            Set now = current timestamp
+            Connect to MySQL using MySQLConnectionSingleton
+            IF connection fails THEN
+                RAISE DatabaseConnectionError "Failed to connect to MySQL for creating monitor progress log"
+            END IF
+            Create dictionary cursor
+            Execute query: SELECT * FROM process_monitor_log WHERE Monitor_Id = {monitor_id}
+            Fetch one row
+            IF no row THEN
+                Log "No record found in process_monitor_log with Monitor_Id={monitor_id}"
+                RETURN False
+            END IF
+            Set monitor_log_data = result
+            Execute query: INSERT INTO process_monitor_progress_log (
+                Monitor_Id, created_dtm, case_id, Request_Id,
+                last_monitored_dtm, next_monitor_dtm, Order_Id,
+                account_num, Expire_Dtm, monitor_status,
+                monitor_status_dtm, monitor_status_description
+            ) VALUES (
+                monitor_id, now, monitor_log_data['case_id'], monitor_log_data['Request_Id'],
+                monitor_log_data['last_monitored_dtm'], monitor_log_data['next_monitor_dtm'],
+                monitor_log_data['Order_Id'], monitor_log_data['account_num'],
+                monitor_log_data['Expire_Dtm'], monitor_log_data['monitor_status'],
+                monitor_log_data['monitor_status_dtm'], monitor_log_data['monitor_status_description']
+            )
+            Commit transaction
+            IF rowcount == 1 THEN
+                Log "Created process_monitor_progress_log record for Monitor_Id={monitor_id}"
+                RETURN True
+            ELSE
+                Log "Failed to create process_monitor_progress_log record"
+                RETURN False
+            END IF
+        CATCH Exception as e
+            Log "Error creating process_monitor_progress_log record: {e}"
+            RETURN False
+        END TRY
+    END METHOD
+
+    METHOD create_process_monitor_details(monitor_id, request_id, connection)
+        TRY
+            Call get_request_details(request_id, connection)
+            IF no details THEN
+                Log "No details found in request_log_details for Request_Id={request_id}"
+                RETURN False
+            END IF
+            Set details = result
+            Create dictionary cursor
+            Execute query: INSERT INTO process_monitor_details (
+                Monitor_Id, para_1, para_2, para_3, para_4, para_5,
+                para_6, para_7, para_8, para_9, para_10
+            ) VALUES (
+                monitor_id, details['para_1'], details['para_2'], details['para_3'],
+                details['para_4'], details['para_5'], details['para_6'],
+                details['para_7'], details['para_8'], details['para_9'], details['para_10']
+            )
+            Commit transaction
+            IF rowcount == 1 THEN
+                Log "Created process_monitor_details record for Monitor_Id={monitor_id}"
+                RETURN True
+            ELSE
+                Log "Failed to create process_monitor_details record"
+                RETURN False
+            END IF
+        CATCH Exception as e
+            Log "Error creating process_monitor_details record: {e}"
+            RETURN False
+        END TRY
+    END METHOD
+
+    METHOD get_request_details(request_id, connection)
+        TRY
+            Create dictionary cursor
+            Execute query: SELECT para_1, para_2, para_3, para_4, para_5,
+                          para_6, para_7, para_8, para_9, para_10
+                          FROM request_log_details WHERE Request_Id = {request_id}
+            Fetch one row
+            IF no result THEN
+                Log "No details found in request_log_details for Request_Id={request_id}"
+                RETURN None
+            END IF
+            Log "Retrieved request details for Request_Id={request_id}"
+            RETURN result
+        CATCH Exception as e
+            Log "Error fetching request details for Request_Id={request_id}: {e}"
+            RETURN None
+        END TRY
+    END METHOD
+
+    METHOD update_request_progress_status(request_id, account_num, status="Completed", connection=None)
+        TRY
+            IF connection is None THEN
+                Connect to MySQL using MySQLConnectionSingleton
+                IF connection fails THEN
+                    RAISE DatabaseConnectionError "Failed to connect to MySQL for updating request status"
+                END IF
+                Set close_connection = True
+            END IF
+            Create dictionary cursor
+            Execute query: UPDATE request_progress_log
+                          SET Request_Status = {status},
+                              Request_Status_Dtm = NOW(),
+                              Request_Status_Description = 'Monitoring cancellation completed' IF status == 'Completed' ELSE 'Error in cancellation process'
+                          WHERE Request_Id = {request_id} AND account_num = {account_num} AND Request_Status = 'Open'
+            IF rowcount != 1 THEN
+                Log "No rows updated in request_progress_log for Request_Id={request_id}, account_num={account_num}"
+                IF close_connection THEN
+                    Rollback transaction
+                END IF
+                RETURN False
+            END IF
+            Execute query: UPDATE request_log
+                          SET Request_Status = {status},
+                              Request_Status_Dtm = NOW(),
+                              Request_Status_Description = 'Monitoring cancellation completed' IF status == 'Completed' ELSE 'Error in cancellation process'
+                          WHERE Request_Id = {request_id} AND account_num = {account_num} AND Request_Status = 'Open'
+            IF rowcount != 1 THEN
+                Log "No rows updated in request_log for Request_Id={request_id}, account_num={account_num}"
+                IF close_connection THEN
+                    Rollback transaction
+                END IF
+                RETURN False
+            END IF
+            IF close_connection THEN
+                Commit transaction
+            END IF
+            Log "Successfully updated request_progress_log and request_log to {status} for Request_Id={request_id}, account_num={account_num}"
+            RETURN True
+        CATCH DatabaseConnectionError as e
+            Log "Connection error: {e}"
+            RETURN False
+        CATCH Exception as e
+            Log "Unexpected error updating request_progress_log or request_log for Request_Id={request_id}, account_num={account_num}: {e}"
+            RETURN False
+        END TRY
+    END METHOD
+END CLASS
+
