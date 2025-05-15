@@ -3,7 +3,7 @@ jsonMapping.py file is as follows:
     Purpose: This script handles database connections and incident creation for debt collection.
     Created Date: 
     Created By: Dulhan Perera
-    Modified By: Dulhan Perera
+    Modified By: Dulhan Perera, Pasan Bathiya
     Version: Python 3.9
     Dependencies: json, datetime, decimal, requests, mysql.connector, utils.logger, utils.connectionSQL, utils.connectAPI, utils.custom_exceptions
     Notes:

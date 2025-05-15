@@ -3,7 +3,7 @@
     Purpose: This script handles database connections and incident creation for debt collection.
     Created Date: 
     Created By: Dulhan Perera
-    Modified By: Dulhan Perera
+    Modified By: Dulhan Perera, Pasan Bathiya
     Version: Python 3.9
     Dependencies: json, datetime, decimal, requests, mysql.connector, utils.logger, utils.connectionSQL, utils.connectAPI, utils.custom_exceptions
     Notes:
@@ -23,6 +23,7 @@ from utils.logger import SingletonLogger
 from utils.connectionSQL import MySQLConnectionSingleton
 # Import custom exceptions for error handling
 from utils.custom_exceptions.customize_exceptions import DatabaseConnectionError
+from datetime import datetime, timedelta
 
 # Initialize the logger using SingletonLogger
 SingletonLogger.configure()
@@ -33,67 +34,20 @@ class Process_request:
     def __init__(self):
         """
         Constructor for initializing the class with a MySQL connection.
-
-        Inputs:
-            - None
-
-        Outputs:
-            - None (initializes instance variables)
-
-        Raises:
-            - DatabaseConnectionError: If the MySQL connection could not be established.
-
-        Description:
-            This constructor initializes the MySQL connection using MySQLConnectionSingleton.
-            If the connection fails, it raises a DatabaseConnectionError.
-            On success, it logs a message indicating that the connection has been established.
         """
-        # Log a success message upon successful connection
         logger.info("MySQL connection initialization attempted")
-        # No need to store connection here, as MySQLConnectionSingleton manages it
 
     def process_case(self, account_number, incident_id, request_id):
         """
         Processes an incident case for a given account.
-
-        Inputs:
-            account_number (str): The account number associated with the case.
-            incident_id (str): The unique identifier of the incident (from para_1 in request_log_details).
-            request_id (int): The request ID to correlate updates across tables.
-
-        Outputs:
-            None
-
-        Returns:
-            bool: 
-                - True if the case was processed and the database was successfully updated.
-                - False if processing failed or database update was unsuccessful.
-
-        Description:
-            This method handles processing of an incident by:
-            1. Logging the start of the case processing.
-            2. Initializing the CreateIncident object with required parameters.
-            3. Running the incident processing logic and capturing the result.
-            4. Updating the request_progress_log and request_log tables based on success or failure.
-            5. Logging the outcome of the update operation.
-            6. Handling any exceptions that occur during the process.
         """
         logger.info(f"Processing case for account: {account_number}, incident: {incident_id}, request: {request_id}")
         
         try:
-            # Create a CreateIncident instance
-            process = CreateIncident(
-                account_num=account_number,
-                incident_id=incident_id
-            )
-            
-            # Execute the incident processing logic
+            process = CreateIncident(account_num=account_number, incident_id=incident_id)
             success = process.process_incident()
-            
-            # Determine the request status based on the processing outcome
             status = "Completed" if success else "Error"
             
-            # Update the request_progress_log and request_log tables
             with MySQLConnectionSingleton() as db_connection:
                 connection = db_connection.get_connection()
                 if not connection:
@@ -101,7 +55,6 @@ class Process_request:
                 
                 cursor = connection.cursor(dictionary=True)
                 try:
-                    # Update request_progress_log
                     update_progress_query = """
                         UPDATE request_progress_log
                         SET Request_Status = %s, Request_Status_Dtm = NOW()
@@ -110,14 +63,12 @@ class Process_request:
                     cursor.execute(update_progress_query, (status, request_id, account_number))
                     connection.commit()
                     
-                    # Check if the update was successful
                     if cursor.rowcount == 1:
                         logger.info(f"Marked request_progress_log as {status} for account {account_number}, request {request_id}")
                     else:
                         logger.warning(f"Failed to update request_progress_log for account {account_number}, request {request_id}")
                         return False
 
-                    # Update request_log
                     update_request_log_query = """
                         UPDATE request_log
                         SET Request_Status = %s, Request_Status_Dtm = NOW()
@@ -126,7 +77,6 @@ class Process_request:
                     cursor.execute(update_request_log_query, (status, request_id, account_number))
                     connection.commit()
                     
-                    # Check if the update was successful
                     if cursor.rowcount == 1:
                         logger.info(f"Marked request_log as {status} for account {account_number}, request {request_id}")
                         return success
@@ -144,43 +94,21 @@ class Process_request:
     def process_single_document(self, row):
         """
         Processes a single MySQL row representing an incident case.
-
-        Inputs:
-            row (dict): A dictionary representing a row fetched from the request_progress_log table.
-                        Expected to contain at least Request_Id and account_num.
-
-        Outputs:
-            None
-
-        Returns:
-            bool:
-                - True if the row was successfully processed.
-                - False if required fields are missing or an error occurred.
-
-        Description:
-            This method extracts the Request_Id and account_num from the input row, then queries
-            the request_log_details table to get the incident_id from para_1. If the required fields
-            are present, it forwards the data to process_case() for further handling.
         """
         try:
-            # Extract the request ID and account number
             request_id = row.get('Request_Id')
             account_number = row.get('account_num')
             
-            # Skip processing if required fields are missing
             if not request_id or not account_number:
                 logger.warning(f"Skipping row - missing required fields: Request_Id={request_id}, account_num={account_number}")
                 return False
             
-            # Validate request_id type
             try:
                 request_id = int(request_id)
-                logger.debug(f"Request_Id type: {type(request_id)}, value: {request_id}")
             except (TypeError, ValueError) as e:
                 logger.error(f"Invalid Request_Id: {request_id}, error: {str(e)}")
                 return False
             
-            # Query request_log_details to get incident_id from para_1
             with MySQLConnectionSingleton() as db_connection:
                 connection = db_connection.get_connection()
                 if not connection:
@@ -193,8 +121,6 @@ class Process_request:
                         FROM request_log_details 
                         WHERE Request_Id = %s
                     """
-                    logger.debug(f"Executing query: {query % request_id}")
-                    # Explicitly pass request_id as a single-element tuple
                     cursor.execute(query, (request_id,))
                     result = cursor.fetchone()
                     
@@ -203,9 +129,6 @@ class Process_request:
                         return False
                     
                     incident_id = result['incident_id']
-                    logger.debug(f"Retrieved incident_id: {incident_id} for Request_Id={request_id}, account_num={account_number}")
-                    
-                    # Proceed with case processing
                     return self.process_case(account_number, incident_id, request_id)
                 
                 finally:
@@ -218,17 +141,6 @@ class Process_request:
     def customer_details_for_case_registration(self, rows):
         """
         Processes rows with Order_Id equal to 1.
-
-        Inputs:
-            rows (list): A list of MySQL row dictionaries to be processed.
-
-        Outputs:
-            None
-
-        Returns:
-            tuple:
-                - processed_count (int): Number of rows successfully processed.
-                - error_count (int): Number of rows that failed to process.
         """
         processed_count = 0
         error_count = 0
@@ -239,7 +151,7 @@ class Process_request:
                     processed_count += 1
                 else:
                     error_count += 1
-                time.sleep(1)  # Rate limiting
+                time.sleep(1)
         
         logger.info(f"Successfully Processed {processed_count} document(s), {error_count} errors")
         return processed_count, error_count
@@ -247,18 +159,11 @@ class Process_request:
     def monitor_payment(self, rows):
         """
         Process rows with Order_Id equal to 2 (Payment Monitoring).
-        
-        Args:
-            rows (list): A list of MySQL row dictionaries to process.
-            
-        Returns:
-            tuple: (processed_count, error_count)
         """
         logger.info("Processing option 2 - Monitor Payment")
         processed_count = 0
         error_count = 0
         
-        # Initialize the MonitorPayment class
         monitor_payment = MonitorPayment()
         
         for row in rows:
@@ -267,7 +172,7 @@ class Process_request:
                     processed_count += 1
                 else:
                     error_count += 1
-                time.sleep(1)  # Rate limiting
+                time.sleep(1)
         
         logger.info(f"Processed {processed_count} documents, {error_count} errors")
         return processed_count, error_count
@@ -275,12 +180,6 @@ class Process_request:
     def monitor_payment_cancel(self, rows):
         """
         Process rows with Order_Id equal to 3 (Monitor Payment Cancel).
-        
-        Args:
-            rows (list): A list of MySQL row dictionaries to process.
-            
-        Returns:
-            tuple: (processed_count, error_count)
         """
         logger.info("Processing option 3 - Monitor Payment Cancel")
         processed_count = 0
@@ -294,39 +193,171 @@ class Process_request:
                     processed_count += 1
                 else:
                     error_count += 1
-                time.sleep(1)  # Rate limiting
+                time.sleep(1)
         
         logger.info(f"Processed {processed_count} documents, {error_count} errors")
         return processed_count, error_count
 
     def close_monitor_if_no_transaction(self, rows):
         """
-        Placeholder for processing rows with Order_Id equal to 4.
+        Process rows with Order_Id equal to 4 (Close Monitor If No Transaction).
+        
+        Args:
+            rows (list): A list of MySQL row dictionaries to process.
+            
+        Returns:
+            tuple: (processed_count, error_count)
         """
-        logger.info("Processing option 4 - Close_Monitor_If_No_Transaction")
-        print("Processing Order_Id 4: Close_Monitor_If_No_Transaction")
+        logger.info("Processing option 4 - Close Monitor If No Transaction")
         processed_count = 0
         error_count = 0
+        monitoring_interval_hours = 24
+        
+        monitor_payment = MonitorPayment()
+        
         for row in rows:
-            if row.get('Order_Id') == 4:
-                logger.info(f"Closing monitor for account {row.get('account_num')}")
-                processed_count += 1
-                time.sleep(1)
+            if row.get('Order_Id') != 4:
+                continue
+                
+            request_id = row.get('Request_Id')
+            account_num = row.get('account_num')
+            case_id = row.get('case_id')
+            
+            if not request_id or not account_num or not case_id:
+                logger.warning(f"Skipping row - missing required fields: Request_Id={request_id}, account_num={account_num}, case_id={case_id}")
+                error_count += 1
+                continue
+                
+            logger.info(f"Processing close monitor for Request_Id={request_id}, account_num={account_num}, case_id={case_id}")
+            
+            try:
+                with MySQLConnectionSingleton() as db_connection:
+                    connection = db_connection.get_connection()
+                    if not connection:
+                        raise DatabaseConnectionError("Failed to connect to MySQL for close monitor processing.")
+                    
+                    connection.ping(reconnect=True)
+                    
+                    try:
+                        # Step 1: Create process_monitor_log entry
+                        now = datetime.now()
+                        next_monitor_dtm = now + timedelta(hours=monitoring_interval_hours)
+                        
+                        cursor = connection.cursor(dictionary=True)
+                        monitor_query = """
+                            INSERT INTO process_monitor_log (
+                                case_id, Request_Id, last_monitored_dtm, next_monitor_dtm,
+                                Order_Id, account_num, Expire_Dtm, monitor_status,
+                                monitor_status_dtm, monitor_status_description
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                        cursor.execute(monitor_query, (
+                            case_id,
+                            request_id,
+                            now,
+                            next_monitor_dtm,
+                            row.get('Order_Id'),
+                            account_num,
+                            None,
+                            'Closed',
+                            now,
+                            'Monitor closed due to no transaction'
+                        ))
+                        connection.commit()
+                        
+                        if cursor.rowcount != 1:
+                            logger.warning(f"Failed to create process_monitor_log for Request_Id={request_id}")
+                            connection.rollback()
+                            error_count += 1
+                            continue
+                            
+                        monitor_id = cursor.lastrowid
+                        cursor.close()
+                        
+                        # Step 2: Create process_monitor_progress_log entry
+                        cursor = connection.cursor(dictionary=True)
+                        progress_query = """
+                            INSERT INTO process_monitor_progress_log (
+                                Monitor_Id, created_dtm, case_id, Request_Id,
+                                last_monitored_dtm, next_monitor_dtm, Order_Id,
+                                account_num, Expire_Dtm, monitor_status,
+                                monitor_status_dtm, monitor_status_description
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                        cursor.execute(progress_query, (
+                            monitor_id,
+                            now,
+                            case_id,
+                            request_id,
+                            now,
+                            next_monitor_dtm,
+                            row.get('Order_Id'),
+                            account_num,
+                            None,
+                            'Closed',
+                            now,
+                            'Monitor closed due to no transaction'
+                        ))
+                        connection.commit()
+                        
+                        if cursor.rowcount != 1:
+                            logger.warning(f"Failed to create process_monitor_progress_log for Monitor_Id={monitor_id}")
+                            connection.rollback()
+                            error_count += 1
+                            continue
+                        cursor.close()
+                        
+                        # Step 3: Copy request_log_details to process_monitor_details
+                        details_success = monitor_payment.create_process_monitor_details(monitor_id, request_id, connection)
+                        if not details_success:
+                            logger.warning(f"Failed to create process_monitor_details for Monitor_Id={monitor_id}")
+                            connection.rollback()
+                            error_count += 1
+                            continue
+                        
+                        # Step 4: Update request_progress_log and request_log
+                        status_success = monitor_payment.update_request_progress_status(
+                            request_id,
+                            account_num,
+                            status="Completed",
+                            connection=connection
+                        )
+                        
+                        if not status_success:
+                            logger.warning(f"Failed to update request status for Request_Id={request_id}")
+                            connection.rollback()
+                            error_count += 1
+                            continue
+                            
+                        connection.commit()
+                        logger.info(f"Successfully processed close monitor for Request_Id={request_id}")
+                        processed_count += 1
+                        
+                    except mysql.connector.Error as db_err:
+                        logger.error(f"Database error during close monitor processing: {str(db_err)}")
+                        connection.rollback()
+                        error_count += 1
+                        continue
+                        
+                    except Exception as e:
+                        logger.error(f"Unexpected error in close monitor processing for Request_Id={request_id}: {str(e)}")
+                        connection.rollback()
+                        error_count += 1
+                        continue
+                        
+            except DatabaseConnectionError as dce:
+                logger.error(f"Connection error: {str(dce)}")
+                error_count += 1
+                continue
+                
+            time.sleep(1)  # Rate limiting
+        
         logger.info(f"Processed {processed_count} documents, {error_count} errors")
         return processed_count, error_count
 
     def get_open_orders(self):
         """
         Fetches all rows from the request_progress_log table where the Request_Status is 'Open'.
-
-        Inputs:
-            None
-
-        Outputs:
-            None
-
-        Returns:
-            list: A list of rows (dictionaries) representing open orders.
         """
         try:
             with MySQLConnectionSingleton() as db_connection:
@@ -354,16 +385,6 @@ class Process_request:
     def process_selected_option(self, option, rows):
         """
         Routes processing to the appropriate method based on the selected option.
-
-        Inputs:
-            option (int): The selected processing mode (expected values: 1, 2, 3, 4).
-            rows (list): A list of MySQL rows to process.
-
-        Outputs:
-            None
-
-        Returns:
-            None
         """
         match option:
             case 1:
@@ -380,15 +401,6 @@ class Process_request:
     def run_process(self):
         """
         Main method to continuously process open orders in a loop.
-
-        Inputs:
-            None
-
-        Outputs:
-            None
-
-        Returns:
-            None
         """
         logger.info("Starting Order Processor")
         

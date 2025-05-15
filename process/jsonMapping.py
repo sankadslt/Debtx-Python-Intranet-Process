@@ -4,7 +4,7 @@
     Purpose: This script handles database connections and incident creation for debt collection.
     Created Date: 
     Created By: Dulhan Perera
-    Modified By: Dulhan Perera
+    Modified By: Dulhan Perera, Pasan Bathiys
     Version: Python 3.9
     Dependencies: json, datetime, decimal, requests, mysql.connector, utils.logger, utils.connectionSQL, utils.connectAPI, utils.custom_exceptions
     Notes:
@@ -137,7 +137,7 @@ class CreateIncident:
             "Litigation": [],
             "LOD_Final_Reminder": [],
             "Dispute": [],
-            "Abnormal_Abs": [""]
+            "Abnormal_Abs": []
         }
 
     def format_datetime_z(self, date_value):
