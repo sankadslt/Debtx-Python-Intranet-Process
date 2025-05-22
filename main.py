@@ -1,6 +1,6 @@
 '''
  jsonMapping.py file is as follows:
-    Purpose: This script handles database connections and incident creation for debt collection.
+    Purpose: This is the main run point of the program.
     Created Date: 
     Created By: Dulhan Perera
     Modified By: Dulhan Perera
@@ -9,7 +9,7 @@
 '''
 
 # Import the main processing class for handling orders
-from process.RequestManipulation import Process_request
+from process.Process_request import Process_request
 
 # Import Singleton utilities for logging
 from utils.logger import SingletonLogger

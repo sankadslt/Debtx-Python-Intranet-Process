@@ -1,6 +1,6 @@
 '''
  jsonMapping.py file is as follows:
-    Purpose: This script handles database connections and incident creation for debt collection.
+    Purpose: This script handles database connections and case creation.
     Created Date: 
     Created By: Dulhan Perera
     Modified By: Dulhan Perera, Pasan Bathiya
@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import mysql.connector
 # Import the main incident processing class
 from process.MonitorPayment import MonitorPayment
-from process.jsonMapping import CreateIncident
+from process.CreateIncident import CreateIncident
 # Import Singleton utilities for logging and MySQL connection
 from utils.logger import SingletonLogger
 from utils.connectionSQL import MySQLConnectionSingleton

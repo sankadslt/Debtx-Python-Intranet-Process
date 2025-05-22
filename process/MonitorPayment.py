@@ -1,6 +1,6 @@
 '''
 jsonMapping.py file is as follows:
-    Purpose: This script handles database connections and incident creation for debt collection.
+    Purpose: This script handles database connections and Order details.
     Created Date: 
     Created By: Dulhan Perera
     Modified By: Dulhan Perera, Pasan Bathiya

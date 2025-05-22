@@ -57,11 +57,11 @@ CLASS Process_request
             WHEN 2: Call monitor_payment(rows)
             WHEN 3: Call monitor_payment_cancel(rows)
             WHEN 4: Call close_monitor_if_no_transaction(rows)
-            DEFAULT: Log "Invalid option selected: {option}"
+            DEFAULT: Log "Invalid option selected: {option}" TODO: Remove this line
         END CASE
     END METHOD
 
-    METHOD customer_details_for_case_registration(rows)
+    METHOD customer_details_for_case_registration(rows) TODO: write this in a function
         Initialize processed_count = 0, error_count = 0
         FOR each row in rows
             IF row.Order_Id == 1 THEN
@@ -77,7 +77,7 @@ CLASS Process_request
         RETURN processed_count, error_count
     END METHOD
 
-    METHOD process_single_document(row)
+    METHOD process_single_document(row) TODO: Do not use technical names for method names
         TRY
             Get request_id and account_number from row
             IF request_id or account_number is missing THEN
@@ -95,10 +95,10 @@ CLASS Process_request
         END TRY
     END METHOD
 
-    METHOD process_case(account_number, incident_id, request_id)
+    METHOD process_case(account_number, incident_id, request_id) TODO: rename this Do_customer_details
         TRY
             Create CreateIncident instance with account_number, incident_id
-            Call process_incident() and store success status
+            Call process_incident() and store success status TODO: change this function to Send_Customer_details
             Set status = "Completed" if success, else "Error"
             Connect to MySQL using MySQLConnectionSingleton
             Update request_progress_log with status, Request_Id, account_number
@@ -316,7 +316,7 @@ CLASS CreateIncident
         END TRY
     END METHOD
 
-    METHOD process_incident
+    METHOD process_incident TODO: add intro
         TRY
             Log "Processing incident {incident_id} for account {account_num}"
             Call read_customer_details

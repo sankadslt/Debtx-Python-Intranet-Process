@@ -26,7 +26,6 @@ from utils.connectAPI import Get_API_URL_Singleton  # Singleton API URL configur
 from utils.custom_exceptions.customize_exceptions import APIConfigError, IncidentCreationError, DatabaseConnectionError, DataProcessingError  # Custom exceptions
 
 # Initialize the logger using SingletonLogger
-SingletonLogger.configure()
 logger = SingletonLogger.get_logger("appLogger")
 
 class CreateIncident:
@@ -295,7 +294,7 @@ class CreateIncident:
                                 "Province": row.get("PROVINCE", "")
                             })
 
-                    logger.info("Successfully read customer details.")
+                    logger.debug("Successfully read customer details.")
                     return "success"
 
                 finally:
@@ -369,10 +368,11 @@ class CreateIncident:
 
     def format_json_object(self):
         """
-        Formats the document data into a JSON string, ensuring compatibility with API model.
+        *   Format data with respective json format if necessary.
+        *   Convert to json with proper indentation.
 
         Returns:
-            str: A formatted JSON string with proper indentation and data conversions.
+            str: Sent formatted JSON string.
         """
         def to_camel_case(snake_str):
             """Convert snake_case or uppercase to camelCase."""
