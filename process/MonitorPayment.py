@@ -18,7 +18,6 @@ from datetime import datetime, timedelta, time
 from utils.custom_exceptions.customize_exceptions import DatabaseConnectionError
 
 # Initialize the logger using SingletonLogger
-SingletonLogger.configure()
 logger = SingletonLogger.get_logger("appLogger")
 
 class MonitorPayment:

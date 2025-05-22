@@ -26,7 +26,6 @@ from utils.custom_exceptions.customize_exceptions import DatabaseConnectionError
 from datetime import datetime, timedelta
 
 # Initialize the logger using SingletonLogger
-SingletonLogger.configure()
 logger = SingletonLogger.get_logger("appLogger")
 
 class Process_request:
