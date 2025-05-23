@@ -5,7 +5,7 @@ import mysql.connector
 from mysql.connector import Error
 from utils.logger import SingletonLogger
 
-class MySQLConnectionSingleton:
+class DBConnectionSingleton:
     _instance = None
     _lock = threading.Lock()
 
@@ -13,7 +13,7 @@ class MySQLConnectionSingleton:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super(MySQLConnectionSingleton, cls).__new__(cls)
+                    cls._instance = super(DBConnectionSingleton, cls).__new__(cls)
                     cls._instance._initialize_connection()
         return cls._instance
 
@@ -69,7 +69,7 @@ class MySQLConnectionSingleton:
                 self.connection.close()
                 self.logger.info("MySQL connection closed.")
                 self.connection = None
-                MySQLConnectionSingleton._instance = None
+                DBConnectionSingleton._instance = None
             except Exception as err:
                 self.logger.error(f"Error closing MySQL connection: {err}")
 

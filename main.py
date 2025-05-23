@@ -1,5 +1,5 @@
 '''
- jsonMapping.py file is as follows:
+ Main.py file is as follows:
     Purpose: This is the main run point of the program.
     Created Date: 
     Created By: Dulhan Perera

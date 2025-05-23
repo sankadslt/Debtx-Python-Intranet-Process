@@ -1,6 +1,5 @@
-
 '''
- jsonMapping.py file is as follows:
+CreateIncident.py file is as follows:
     Purpose: This script handles database connections and incident creation for debt collection.
     Created Date: 
     Created By: Dulhan Perera
@@ -21,7 +20,7 @@ import mysql.connector  # For connecting and interacting with a MySQL database
 
 # --- Internal project imports ---
 from utils.logger import SingletonLogger  # Singleton logger for logging messages
-from utils.connectionSQL import MySQLConnectionSingleton  # Singleton MySQL connection
+from utils.connectionSQL import DBConnectionSingleton  # Singleton MySQL connection
 from utils.connectAPI import Get_API_URL_Singleton  # Singleton API URL configuration
 from utils.custom_exceptions.customize_exceptions import APIConfigError, IncidentCreationError, DatabaseConnectionError, DataProcessingError  # Custom exceptions
 
@@ -170,7 +169,7 @@ class CreateIncident:
         """
         try:
             logger.info(f"Reading customer details for account number: {self.account_num}")
-            with MySQLConnectionSingleton() as db_connection:
+            with DBConnectionSingleton() as db_connection:
                 connection = db_connection.get_connection()
                 if not connection:
                     raise DatabaseConnectionError("Failed to connect to MySQL for reading customer details.")
@@ -245,7 +244,7 @@ class CreateIncident:
                                 "Zip_Code": row.get("ZIP_CODE", ""),
                                 "Customer_Type_Name": "",
                                 "Nic": str(row.get("NIC", "")),
-                                "Customer_Type_Id": str(row.get("CUSTOMER_TYPE_ID", 0)),  # Convert to string
+                                "Customer_Type_Id": str(row.get("CUSTOMER_TYPE_ID", 0)),
                                 "Customer_Type": row.get("CUSTOMER_TYPE", "")
                             }
 
@@ -253,7 +252,7 @@ class CreateIncident:
                                 "Account_Status": row.get("ACCOUNT_STATUS_BSS", ""),
                                 "Acc_Effective_Dtm": self.format_datetime_z(row.get("ACCOUNT_EFFECTIVE_DTM_BSS")),
                                 "Acc_Activate_Date": "1900-01-01T00:00:00.000Z",
-                                "Credit_Class_Id": str(row.get("CREDIT_CLASS_ID", 0)),  # Convert to string
+                                "Credit_Class_Id": str(row.get("CREDIT_CLASS_ID", 0)),
                                 "Credit_Class_Name": row.get("CREDIT_CLASS_NAME", ""),
                                 "Billing_Centre": row.get("BILLING_CENTER_NAME", ""),
                                 "Customer_Segment": row.get("CUSTOMER_SEGMENT_ID", ""),
@@ -265,9 +264,9 @@ class CreateIncident:
 
                             if row.get("LAST_PAYMENT_DAT"):
                                 self.mongo_data["Last_Actions"] = [{
-                                    "Billed_Seq": str(row.get("LAST_BILL_SEQ", 0)),  # Convert to string
+                                    "Billed_Seq": str(row.get("LAST_BILL_SEQ", 0)),
                                     "Billed_Created": self.format_datetime_z(row.get("LAST_BILL_DTM")),
-                                    "Payment_Seq": str(row.get("LAST_PAYMENT_SEQ", 0)),  # Convert to string
+                                    "Payment_Seq": str(row.get("LAST_PAYMENT_SEQ", 0)),
                                     "Payment_Created": self.format_datetime_z(row.get("LAST_PAYMENT_DAT")),
                                     "Payment_Money": float(row["LAST_PAYMENT_MNY"]) if row.get("LAST_PAYMENT_MNY") else 0.0,
                                     "Billed_Amount": float(row["LAST_PAYMENT_MNY"]) if row.get("LAST_PAYMENT_MNY") else 0.0
@@ -312,7 +311,7 @@ class CreateIncident:
         """
         try:
             logger.info(f"Getting payment data for account: {self.account_num}")
-            with MySQLConnectionSingleton() as db_connection:
+            with DBConnectionSingleton() as db_connection:
                 connection = db_connection.get_connection()
                 if not connection:
                     raise DatabaseConnectionError("MySQL connection failed.")
@@ -350,9 +349,9 @@ class CreateIncident:
                         )
 
                         self.mongo_data["Last_Actions"] = [{
-                            "Billed_Seq": str(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),  # Convert to string
+                            "Billed_Seq": str(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),
                             "Billed_Created": billed_date,
-                            "Payment_Seq": str(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),  # Convert to string
+                            "Payment_Seq": str(payment.get("ACCOUNT_PAYMENT_SEQ", 0)),
                             "Payment_Created": payment_date,
                             "Payment_Money": float(payment.get("AP_ACCOUNT_PAYMENT_MNY", 0)),
                             "Billed_Amount": float(payment.get("AP_ACCOUNT_PAYMENT_MNY", 0))
@@ -368,11 +367,11 @@ class CreateIncident:
 
     def format_json_object(self):
         """
-        *   Format data with respective json format if necessary.
-        *   Convert to json with proper indentation.
+        Format data with respective JSON format if necessary.
+        Convert to JSON with proper indentation.
 
         Returns:
-            str: Sent formatted JSON string.
+            str: Formatted JSON string.
         """
         def to_camel_case(snake_str):
             """Convert snake_case or uppercase to camelCase."""
@@ -385,31 +384,40 @@ class CreateIncident:
         if "Customer_Details" in json_data:
             json_data["Customer_Details"]["Nic"] = str(json_data["Customer_Details"].get("Nic", ""))
             json_data["Customer_Details"]["Customer_Type_Id"] = str(json_data["Customer_Details"].get("Customer_Type_Id", ""))
+
         if "Account_Details" in json_data:
             json_data["Account_Details"]["Email_Address"] = str(json_data["Account_Details"].get("Email_Address", ""))
             json_data["Account_Details"]["Credit_Class_Id"] = str(json_data["Account_Details"].get("Credit_Class_Id", ""))
 
-        # Transform Last_Actions to match API model
+        # Ensure Last_Actions fields match the Pydantic model exactly
         if "Last_Actions" in json_data:
             transformed_actions = []
             for action in json_data["Last_Actions"]:
                 transformed_action = {
-                    to_camel_case(key): value for key, value in action.items()
+                    "Billed_Seq": str(action.get("Billed_Seq", "")),
+                    "Billed_Created": action.get("Billed_Created", ""),
+                    "Payment_Seq": str(action.get("Payment_Seq", "")),
+                    "Payment_Created": action.get("Payment_Created", ""),
+                    "Payment_Money": float(action.get("Payment_Money", 0)),
+                    "Billed_Amount": float(action.get("Billed_Amount", 0))
                 }
                 transformed_actions.append(transformed_action)
             json_data["Last_Actions"] = transformed_actions
 
-        # Transform Marketing_Details to match API model
+        # Transform Marketing_Details to match API model (camelCase as per current logic)
         if "Marketing_Details" in json_data:
             transformed_marketing = []
             for marketing in json_data["Marketing_Details"]:
                 transformed_marketing_item = {
-                    to_camel_case(key): value for key, value in marketing.items()
+                    "Account_Manager": str(marketing.get("ACCOUNT_MANAGER", "")),
+                    "Consumer_Market": str(marketing.get("CONSUMER_MARKET", "")),
+                    "Informed_To": str(marketing.get("Informed_To", "")),
+                    "Informed_On": str(marketing.get("Informed_On", "1900-01-01T00:00:00.000Z"))
                 }
                 transformed_marketing.append(transformed_marketing_item)
             json_data["Marketing_Details"] = transformed_marketing
 
-        # Remove Accounts_Details (not in API model) and add Account_Cross_Details
+        # Transform Accounts_Details to Account_Cross_Details
         if "Accounts_Details" in json_data:
             account_cross_details = [
                 {
@@ -460,6 +468,7 @@ class CreateIncident:
         """
         try:
             logger.info(f"Sending data to API: {api_url}")
+            logger.debug(f"JSON Payload: {json_output}")  # Log the JSON payload for debugging
             headers = {
                 "Content-Type": "application/json",
                 "Accept": "application/json"
@@ -475,7 +484,7 @@ class CreateIncident:
             logger.error(f"Request Error: {e}")
             return None
 
-    def process_incident(self):
+    def process_case_creation(self):
         """
         Processes a debt collection incident by gathering data and sending to API.
 
@@ -494,7 +503,7 @@ class CreateIncident:
                 logger.warning(f"Failed to retrieve payment data for account {self.account_num}")
 
             json_output = self.format_json_object()
-            print(json_output)
+            logger.debug(f"Formatted JSON: {json_output}")  # Log the formatted JSON for debugging
 
             api_config = Get_API_URL_Singleton()
             api_url = api_config.get_api_url()
