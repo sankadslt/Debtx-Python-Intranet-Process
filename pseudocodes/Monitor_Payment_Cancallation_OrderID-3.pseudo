@@ -1,245 +1,41 @@
-Pseudocode for Order_Id = 3 (Monitor Payment Cancellation)
+START Processing Order_Id 3
 
-1. Main Processing Loop (RequestManipulation.py: run_process)
-METHOD run_process
-    Log "Starting Order Processor"
-    WHILE True
-        TRY
-            Call get_open_orders to fetch rows from request_progress_log where Request_Status = 'Open'
-            IF no open orders THEN
-                Log "No open orders found. Waiting..."
-                Sleep for 5 seconds
-                CONTINUE
-            END IF
-            Log "Found {number} open orders"
-            FOR option FROM 1 TO 4
-                IF option == 3 THEN
-                    Filter rows where Order_Id == 3
-                    IF rows exist THEN
-                        Log "Processing {number} rows for Order_Id 3"
-                        Call monitor_payment_cancel(filtered_rows)
-                    END IF
-                END IF
-            END FOR
-            Sleep for 1 second
-        CATCH KeyboardInterrupt
-            Log "Program terminated by user"
-            BREAK
-        CATCH Exception as e
-            Log "Unexpected error: {e}"
-            Sleep for 5 seconds
-        END TRY
-    END WHILE
-END METHOD
+1. The program finds an order with Order_Id 3 in the database (like checking a to-do list for "Open" tasks).
 
-2. Fetching Open Orders (RequestManipulation.py: get_open_orders)
-METHOD get_open_orders
-    TRY
-        Connect to MySQL using MySQLConnectionSingleton
-        Execute query: SELECT * FROM request_progress_log WHERE Request_Status = 'Open'
-        Fetch all rows
-        Log "Fetched {number} open orders from request_progress_log"
-        RETURN rows
-    CATCH Exception as e
-        Log "Error fetching open orders: {e}"
-        RETURN empty list
-    END TRY
-END METHOD
+2. It gets the request ID, account number, and case ID (a number tied to the monitoring) from the order.
 
-3. Processing Payment Monitoring Cancellation (RequestManipulation.py: monitor_payment_cancel)
-METHOD monitor_payment_cancel(rows)
-    Log "Processing option 3 - Monitor Payment Cancel"
-    Initialize processed_count = 0
-    Initialize error_count = 0
-    Create MonitorPayment instance (monitor_payment)
-    FOR each row in rows
-        IF row.Order_Id == 3 THEN
-            IF monitor_payment.cancel_monitoring_request(row) THEN
-                Increment processed_count
-            ELSE
-                Increment error_count
-            END IF
-            Sleep for 1 second
-        END IF
-    END FOR
-    Log "Processed {processed_count} documents, {error_count} errors"
-    RETURN processed_count, error_count
-END METHOD
+3. It checks if the account number, request ID, and case ID are okay:
+   - Account number must be text and not empty.
+   - Request ID must be a number greater than 0.
+   - Case ID must be text and not empty.
+   - If any are bad, it writes in the diary: "Invalid account number", "Invalid request ID", or "Invalid case ID", counts 1 error, and stops.
 
-4. MonitorPayment Class (MonitorPayment.py)
-CLASS MonitorPayment
-    CONSTRUCTOR
-        Log "MonitorPayment class initialized"
-        Set monitoring_interval_hours = 24
-    END CONSTRUCTOR
+4. It writes in the diary: "Processing cancellation for request ID X, account Y, case Z".
 
-    METHOD cancel_monitoring_request(request_data)
-        TRY
-            Get request_id from request_data['Request_Id']
-            Get account_num from request_data['account_num']
-            Get case_id from request_data['case_id']
-            IF request_id is missing OR account_num is missing OR case_id is missing THEN
-                Log "Skipping cancellation request - missing Request_Id, account_num, or case_id"
-                RETURN False
-            END IF
-            Log "Processing cancellation request {request_id} for account {account_num}, case {case_id}"
-            Connect to MySQL using MySQLConnectionSingleton
-            IF connection fails THEN
-                RAISE DatabaseConnectionError "Failed to connect to MySQL for cancellation process"
-            END IF
-            Ping connection to ensure it’s alive
-            TRY
-                Call get_request_details(request_id, connection)
-                IF no details THEN
-                    Log "No details found in request_log_details for Request_Id={request_id}"
-                    RETURN False
-                END IF
-                Set request_details = result
-                Create dictionary cursor
-                Execute query: SELECT Monitor_Id FROM process_monitor_progress_log 
-                              WHERE case_id = {case_id} AND account_num = {account_num}
-                Fetch one row
-                IF no row THEN
-                    Log "No record found in process_monitor_progress_log for case_id={case_id}, account_num={account_num}"
-                    RETURN False
-                END IF
-                Set monitor_id = result['Monitor_Id']
-                Set now = current timestamp
-                Set next_monitor_dtm = now + monitoring_interval_hours (24 hours)
-                Create dictionary cursor
-                Execute query: UPDATE process_monitor_progress_log
-                              SET Request_Id = {request_id},
-                                  last_monitored_dtm = {now},
-                                  next_monitor_dtm = {next_monitor_dtm},
-                                  Order_Id = request_data['Order_Id'],
-                                  monitor_status = 'Cancelled',
-                                  monitor_status_dtm = {now},
-                                  monitor_status_description = 'Cancellation processed'
-                              WHERE Monitor_Id = {monitor_id} AND case_id = {case_id} AND account_num = {account_num}
-                IF rowcount != 1 THEN
-                    Log "Failed to update process_monitor_progress_log for Monitor_Id={monitor_id}"
-                    Rollback transaction
-                    RETURN False
-                END IF
-                Create dictionary cursor
-                Execute query: UPDATE process_monitor_log
-                              SET Request_Id = {request_id},
-                                  last_monitored_dtm = {now},
-                                  next_monitor_dtm = {next_monitor_dtm},
-                                  Order_Id = request_data['Order_Id'],
-                                  monitor_status = 'Cancelled',
-                                  monitor_status_dtm = {now},
-                                  monitor_status_description = 'Cancellation processed'
-                              WHERE Monitor_Id = {monitor_id} AND case_id = {case_id} AND account_num = {account_num}
-                IF rowcount != 1 THEN
-                    Log "Failed to update process_monitor_log for Monitor_Id={monitor_id}"
-                    Rollback transaction
-                    RETURN False
-                END IF
-                Create dictionary cursor
-                Execute query: UPDATE process_monitor_details
-                              SET para_1 = request_details['para_1'],
-                                  para_2 = request_details['para_2'],
-                                  para_3 = NULL, para_4 = NULL, para_5 = NULL,
-                                  para_6 = NULL, para_7 = NULL, para_8 = NULL,
-                                  para_9 = NULL, para_10 = NULL
-                              WHERE Monitor_Id = {monitor_id}
-                IF rowcount != 1 THEN
-                    Log "Failed to update process_monitor_details for Monitor_Id={monitor_id}"
-                    Rollback transaction
-                    RETURN False
-                END IF
-                Call update_request_progress_status(request_id, account_num, status="Completed", connection)
-                IF not successful THEN
-                    Rollback transaction
-                    RETURN False
-                END IF
-                Commit transaction
-                Log "Successfully processed cancellation for Request_Id={request_id}, account_num={account_num}"
-                RETURN True
-            CATCH mysql.connector.Error as db_err
-                Log "Database error during cancellation process: {db_err}"
-                Rollback transaction
-                RETURN False
-            CATCH Exception as e
-                Log "Unexpected error in cancellation process for Request_Id={request_id}: {e}"
-                Rollback transaction
-                RETURN False
-            END TRY
-        CATCH DatabaseConnectionError as e
-            Log "Connection error: {e}"
-            RETURN False
-        CATCH Exception as e
-            Log "Unexpected error in cancellation process for Request_Id={request_id}: {e}"
-            RETURN False
-        END TRY
-    END METHOD
+5. It starts the cancellation process:
+   - It connects to the database.
+   - It gets extra details for the request ID (like parameters).
+   - If no details, it writes in the diary: "No details for request X" and stops.
+   - It checks if a monitoring record exists for the case ID and account number.
+   - If no record, it writes in the diary: "No monitoring record for case Z, account Y" and stops.
+   - It gets the monitoring ID from the record.
+   - It updates the progress record (process_monitor_progress_log) to set status to "Cancelled" with a note "Cancellation processed".
+   - If updating fails, it writes in the diary: "Failed to update progress record" and stops.
+   - It updates the monitoring record (process_monitor_log) to set status to "Cancelled" with the same note.
+   - If updating fails, it writes in the diary: "Failed to update monitoring record" and stops.
+   - It updates the details record (process_monitor_details) to keep only the first two parameters and clear the rest.
+   - If updating fails, it writes in the diary: "Failed to update details" and stops.
+   - It updates two database files (request_progress_log and request_log) to mark the order as "Completed".
+   - If updating fails, it writes in the diary: "Failed to update status" and stops.
 
-    METHOD get_request_details(request_id, connection)
-        TRY
-            Create dictionary cursor
-            Execute query: SELECT para_1, para_2, para_3, para_4, para_5,
-                          para_6, para_7, para_8, para_9, para_10
-                          FROM request_log_details WHERE Request_Id = {request_id}
-            Fetch one row
-            IF no result THEN
-                Log "No details found in request_log_details for Request_Id={request_id}"
-                RETURN None
-            END IF
-            Log "Retrieved request details for Request_Id={request_id}"
-            RETURN result
-        CATCH Exception as e
-            Log "Error fetching request details for Request_Id={request_id}: {e}"
-            RETURN None
-        END TRY
-    END METHOD
+6. It saves all changes to the database.
 
-    METHOD update_request_progress_status(request_id, account_num, status="Completed", connection=None)
-        TRY
-            IF connection is None THEN
-                Connect to MySQL using MySQLConnectionSingleton
-                IF connection fails THEN
-                    RAISE DatabaseConnectionError "Failed to connect to MySQL for updating request status"
-                END IF
-                Set close_connection = True
-            END IF
-            Create dictionary cursor
-            Execute query: UPDATE request_progress_log
-                          SET Request_Status = {status},
-                              Request_Status_Dtm = NOW(),
-                              Request_Status_Description = 'Monitoring cancellation completed' IF status == 'Completed' ELSE 'Error in cancellation process'
-                          WHERE Request_Id = {request_id} AND account_num = {account_num} AND Request_Status = 'Open'
-            IF rowcount != 1 THEN
-                Log "No rows updated in request_progress_log for Request_Id={request_id}, account_num={account_num}"
-                IF close_connection THEN
-                    Rollback transaction
-                END IF
-                RETURN False
-            END IF
-            Execute query: UPDATE request_log
-                          SET Request_Status = {status},
-                              Request_Status_Dtm = NOW(),
-                              Request_Status_Description = 'Monitoring cancellation completed' IF status == 'Completed' ELSE 'Error in cancellation process'
-                          WHERE Request_Id = {request_id} AND account_num = {account_num} AND Request_Status = 'Open'
-            IF rowcount != 1 THEN
-                Log "No rows updated in request_log for Request_Id={request_id}, account_num={account_num}"
-                IF close_connection THEN
-                    Rollback transaction
-                END IF
-                RETURN False
-            END IF
-            IF close_connection THEN
-                Commit transaction
-            END IF
-            Log "Successfully updated request_progress_log and request_log to {status} for Request_Id={request_id}, account_num={account_num}"
-            RETURN True
-        CATCH DatabaseConnectionError as e
-            Log "Connection error: {e}"
-            RETURN False
-        CATCH Exception as e
-            Log "Unexpected error updating request_progress_log or request_log for Request_Id={request_id}, account_num={account_num}: {e}"
-            RETURN False
-        END TRY
-    END METHOD
-END CLASS
+7. It writes in the diary: "Successfully cancelled request X, account Y".
 
+8. It counts 1 success if everything worked, or 1 error if something went wrong.
+
+9. It writes in the diary: "Processed 1 success, 0 errors" (or "0 successes, 1 error").
+
+10. It waits 1 second before moving to the next order.
+
+END Processing Order_Id 3

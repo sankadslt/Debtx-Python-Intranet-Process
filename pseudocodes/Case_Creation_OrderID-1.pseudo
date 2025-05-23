@@ -1,354 +1,52 @@
-Pseudocode for Order_Id = 1 (Case Registration)
-1. Main Processing Loop (RequestManipulation.py: run_process)
+START Processing Order_Id 1
 
-METHOD run_process
-    Log "Starting Order Processor"
-    WHILE True
-        TRY
-            Call get_open_orders to fetch rows from request_progress_log where Request_Status = 'Open'
-            IF no open orders THEN
-                Log "No open orders found. Waiting..."
-                Sleep for 5 seconds
-                CONTINUE
-            END IF
-            Log "Found {number} open orders"
-            FOR option FROM 1 TO 4
-                IF option == 1 THEN
-                    Filter rows where Order_Id == 1
-                    IF rows exist THEN
-                        Log "Processing {number} rows for Order_Id 1"
-                        Call customer_details_for_case_registration(filtered_rows)
-                    END IF
-                END IF
-            END FOR
-            Sleep for 1 second
-        CATCH KeyboardInterrupt
-            Log "Program terminated by user"
-            BREAK
-        CATCH Exception as e
-            Log "Unexpected error: {e}"
-            Sleep for 5 seconds
-        END TRY
-    END WHILE
-END METHOD
+1. The program finds an order with Order_Id 1 in the database (like checking a to-do list for "Open" tasks).
 
-2. Fetching Open Orders (RequestManipulation.py: get_open_orders)
-METHOD get_open_orders
-    TRY
-        Connect to MySQL using MySQLConnectionSingleton
-        Execute query: SELECT * FROM request_progress_log WHERE Request_Status = 'Open'
-        Fetch all rows
-        Log "Fetched {number} open orders from request_progress_log"
-        RETURN rows
-    CATCH Exception as e
-        Log "Error fetching open orders: {e}"
-        RETURN empty list
-    END TRY
-END METHOD
+2. It gets the request ID (a unique number for the task) and account number (like a customer’s ID).
 
-3. Processing Case Registration (RequestManipulation.py: customer_details_for_case_registration)
-METHOD customer_details_for_case_registration(rows)
-    Initialize processed_count = 0
-    Initialize error_count = 0
-    FOR each row in rows
-        IF row.Order_Id == 1 THEN
-            IF process_single_document(row) THEN
-                Increment processed_count
-            ELSE
-                Increment error_count
-            END IF
-            Sleep for 1 second
-        END IF
-    END FOR
-    Log "Successfully Processed {processed_count} document(s), {error_count} errors"
-    RETURN processed_count, error_count
-END METHOD
+3. It checks if the account number and request ID are okay:
+   - Account number must be text and not empty (e.g., "ACC123" is okay, but "" or nothing is not).
+   - Request ID must be a number greater than 0 (e.g., 123 is okay, but 0 or "abc" is not).
+   - If either is bad, it writes in the diary: "Invalid account number" or "Invalid request ID" and stops.
 
-4. Processing a Single Document (RequestManipulation.py: process_single_document)
-METHOD process_single_document(row)
-    TRY
-        Get request_id from row['Request_Id']
-        Get account_number from row['account_num']
-        IF request_id is missing OR account_number is missing THEN
-            Log "Skipping row - missing required fields: Request_Id={request_id}, account_num={account_number}"
-            RETURN False
-        END IF
-        TRY
-            Convert request_id to integer
-        CATCH TypeError or ValueError as e
-            Log "Invalid Request_Id: {request_id}, error: {e}"
-            RETURN False
-        END TRY
-        Connect to MySQL using MySQLConnectionSingleton
-        IF connection fails THEN
-            RAISE DatabaseConnectionError "Failed to connect to MySQL for fetching incident_id"
-        END IF
-        Create dictionary cursor
-        TRY
-            Execute query: SELECT para_1 AS incident_id FROM request_log_details WHERE Request_Id = {request_id}
-            Fetch one row
-            IF no result OR incident_id is missing THEN
-                Log "No incident_id found in request_log_details for Request_Id={request_id}"
-                RETURN False
-            END IF
-            Get incident_id from result
-            RETURN process_case(account_number, incident_id, request_id)
-        FINALLY
-            Close cursor
-        END TRY
-    CATCH Exception as e
-        Log "Error processing row for account {account_number}, request {request_id}: {e}"
-        RETURN False
-    END TRY
-END METHOD
+4. It writes in the diary: "Processing case registration for request ID X".
 
-5. Processing a Case (RequestManipulation.py: process_case)
-METHOD process_case(account_number, incident_id, request_id)
-    TRY
-        Log "Processing case for account: {account_number}, incident: {incident_id}, request: {request_id}"
-        Create CreateIncident instance with account_num = account_number, incident_id = incident_id
-        Call process_incident and store result in success
-        Set status = "Completed" IF success ELSE "Error"
-        Connect to MySQL using MySQLConnectionSingleton
-        IF connection fails THEN
-            RAISE DatabaseConnectionError "Failed to connect to MySQL for updating request_progress_log"
-        END IF
-        Create dictionary cursor
-        TRY
-            Execute query: UPDATE request_progress_log
-                          SET Request_Status = {status}, Request_Status_Dtm = NOW()
-                          WHERE Request_Id = {request_id} AND account_num = {account_number} AND Request_Status = 'Open'
-            Commit transaction
-            IF rowcount == 1 THEN
-                Log "Marked request_progress_log as {status} for account {account_number}, request {request_id}"
-            ELSE
-                Log "Failed to update request_progress_log for account {account_number}, request {request_id}"
-                RETURN False
-            END IF
-            Execute query: UPDATE request_log
-                          SET Request_Status = {status}, Request_Status_Dtm = NOW()
-                          WHERE Request_Id = {request_id} AND account_num = {account_number} AND Request_Status = 'Open'
-            Commit transaction
-            IF rowcount == 1 THEN
-                Log "Marked request_log as {status} for account {account_number}, request {request_id}"
-                RETURN success
-            ELSE
-                Log "Failed to update request_log for account {account_number}, request {request_id}"
-                RETURN False
-            END IF
-        FINALLY
-            Close cursor
-        END TRY
-    CATCH Exception as e
-        Log "Error processing case for account {account_number}, request {request_id}: {e}"
-        RETURN False
-    END TRY
-END METHOD
+5. It looks in the database for an incident ID (a number tied to the debt case) linked to the request ID.
 
-6. Incident Creation (jsonMapping.py: CreateIncident)
-CLASS CreateIncident
-    CONSTRUCTOR(account_num, incident_id)
-        TRY
-            IF account_num is None THEN
-                RAISE ValueError "account_num cannot be None"
-            END IF
-            Set self.account_num = string(account_num)
-            IF incident_id is None THEN
-                RAISE ValueError "incident_id cannot be None"
-            END IF
-            Set self.incident_id = integer(incident_id)
-            Set self.mongo_data = initialize_mongo_doc()
-        CATCH TypeError or ValueError as e
-            RAISE ValueError "Invalid input: {e}"
-        END TRY
-    END CONSTRUCTOR
+6. If no incident ID is found, it writes in the diary: "No incident ID for request X" and stops.
 
-    METHOD initialize_mongo_doc
-        Set now = current UTC timestamp in format "YYYY-MM-DDTHH:MM:SS.000Z"
-        RETURN dictionary with default incident structure
-            Set Doc_Version = 1.0
-            Set Incident_Id = self.incident_id
-            Set Account_Num = self.account_num
-            Set Customer_Ref = "CR{self.account_num}"
-            Set Arrears = 1000
-            Set Bss_Arrears_Amount = 1000
-            Set Last_Bss_Reading_Date = now
-            Initialize other fields (e.g., Created_By, Created_Dtm, Incident_Status, etc.)
-            Initialize nested lists: Accounts_Details, Contact_Details, Product_Details, etc.
-    END METHOD
+7. It checks the account number and request ID again to be safe.
 
-    METHOD read_customer_details
-        TRY
-            Log "Reading customer details for account number: {self.account_num}"
-            Connect to MySQL using MySQLConnectionSingleton
-            IF connection fails THEN
-                RAISE DatabaseConnectionError "Failed to connect to MySQL for reading customer details"
-            END IF
-            Create dictionary cursor
-            Execute query: SELECT * FROM debt_cust_detail WHERE ACCOUNT_NUM = {self.account_num} ORDER BY LOAD_DATE DESC
-            Fetch all rows
-            IF rows is None THEN
-                Log "Query returned None for account {self.account_num}"
-                RETURN "error"
-            END IF
-            IF no rows THEN
-                Log "No customer data found for account {self.account_num}"
-                RETURN "no_data"
-            END IF
-            Initialize seen_products as empty set
-            FOR each row in rows
-                IF Customer_Details is empty THEN
-                    Set Customer_Ref = row['CUSTOMER_REF'] OR "CR{self.account_num}"
-                    IF row['TECNICAL_CONTACT_EMAIL'] contains "@" THEN
-                        Add email contact to Contact_Details
-                    END IF
-                    IF row['MOBILE_CONTACT'] exists THEN
-                        Add mobile contact to Contact_Details
-                    END IF
-                    IF row['WORK_CONTACT'] exists THEN
-                        Add work contact to Contact_Details
-                    END IF
-                    Set Customer_Details with name, address, NIC, customer type, etc.
-                    Set Account_Details with status, effective date, credit class, etc.
-                    IF row['LAST_PAYMENT_DAT'] exists THEN
-                        Update Last_Actions with billed seq, payment details
-                    END IF
-                END IF
-                Set product_id = row['ASSET_ID']
-                IF product_id exists AND not in seen_products THEN
-                    Add product to Product_Details with label, status, address, etc.
-                    Add product_id to seen_products
-                END IF
-            END FOR
-            Log "Successfully read customer details"
-            RETURN "success"
-        CATCH Exception as e
-            Log "Error reading customer details: {e}"
-            RAISE DataProcessingError "Error reading customer details: {e}"
-        END TRY
-    END METHOD
+8. If they’re okay, it writes in the diary: "Starting to process case for account Y, incident Z, request X".
 
-    METHOD get_payment_data
-        TRY
-            Log "Getting payment data for account: {self.account_num}"
-            Connect to MySQL using MySQLConnectionSingleton
-            IF connection fails THEN
-                RAISE DatabaseConnectionError "MySQL connection failed"
-            END IF
-            Create dictionary cursor
-            Execute query: SELECT * FROM debt_payment WHERE AP_ACCOUNT_NUMBER = {self.account_num} ORDER BY ACCOUNT_PAYMENT_DAT DESC LIMIT 1
-            Fetch all rows
-            IF rows exist THEN
-                Set payment = first row
-                Execute query: SELECT LAST_BILL_DTM FROM debt_cust_detail WHERE ACCOUNT_NUM = {self.account_num} ORDER BY LOAD_DATE DESC LIMIT 1
-                Fetch one row
-                Set payment_date = format_datetime_z(payment['ACCOUNT_PAYMENT_DAT'])
-                Set billed_date = format_datetime_z(bill_data['LAST_BILL_DTM']) IF exists ELSE "1900-01-01T00:00:00.000Z"
-                Update Last_Actions with billed seq, payment amount, dates
-                Log "Payment data processed with all required fields"
-                RETURN "success"
-            END IF
-            RETURN "failure"
-        CATCH Exception as e
-            Log "Payment processing error: {e}"
-            RAISE DataProcessingError "Payment data error: {e}"
-        END TRY
-    END METHOD
+9. It starts the incident creation process:
+   - It checks if the account number and incident ID are valid (same rules: account number is text, incident ID is a number > 0).
+   - If invalid, it writes in the diary: "Invalid account or incident" and stops.
+   - It creates a form with basic info (account number, incident ID, amount owed, date).
+   - It looks up customer details in the database (like name, address, phone, email).
+   - If no customer details, it writes in the diary: "No customer details for account Y" and stops.
+   - It adds customer details to the form (name, address, contacts, account status).
+   - It looks for the latest payment data (like the last payment made).
+   - If payment data is found, it adds it to the form (payment amount, date).
+   - If no payment data, it notes in the diary: "No payment data found" but continues.
+   - It formats the form into a special data format (like a neatly typed report).
+   - It gets the address of an external system (like a website to send the report to).
+   - If no address, it writes in the diary: "No address to send report" and stops.
+   - It sends the report to the external system.
+   - If the system responds, it writes in the diary: "Successfully sent report".
+   - If no response or an error, it writes in the diary: "Failed to send report" and stops.
+10. If the incident is created successfully, it marks the order as "Completed" in two database files (request_progress_log and request_log).
 
-    METHOD format_datetime_z(date_value)
-        IF date_value is empty THEN
-            RETURN "1900-01-01T00:00:00.000Z"
-        END IF
-        IF date_value is datetime THEN
-            RETURN date_value formatted as "YYYY-MM-DDTHH:MM:SS.000Z"
-        END IF
-        IF date_value is date THEN
-            Convert to datetime and RETURN formatted as "YYYY-MM-DDTHH:MM:SS.000Z"
-        END IF
-        TRY
-            Parse date_value as "YYYY-MM-DD HH:MM:SS"
-            RETURN formatted as "YYYY-MM-DDTHH:MM:SS.000Z"
-        CATCH Exception
-            RETURN "1900-01-01T00:00:00.000Z"
-        END TRY
-    END METHOD
+11. If the incident fails, it marks them as "Error".
 
-    METHOD format_json_object
-        Define to_camel_case function to convert snake_case to camelCase
-        Serialize mongo_data to JSON using json_serializer
-        Convert Customer_Details['Nic'] and ['Customer_Type_Id'] to strings
-        Convert Account_Details['Email_Address'] and ['Credit_Class_Id'] to strings
-        Transform Last_Actions keys to camelCase
-        Transform Marketing_Details keys to camelCase
-        Create Account_Cross_Details from Accounts_Details
-        Remove Accounts_Details
-        RETURN JSON string with 4-space indentation
-    END METHOD
+12. It writes in the diary: "Updated status to Completed for account Y, request X" (or "Error" if it failed).
 
-    METHOD json_serializer
-        RETURN function that:
-            IF input is datetime or date THEN
-                Convert to ISO 8601 with ".000Z"
-            END IF
-            IF input is Decimal THEN
-                RETURN float or int based on value
-            END IF
-            IF input is None or "none" THEN
-                RETURN None
-            END IF
-            IF input is number THEN
-                RETURN number
-            END IF
-            RETURN string(input)
-    END METHOD
+13. If the database updates fail, it writes in the diary: "Failed to update status" and stops.
 
-    METHOD send_to_api(json_output, api_url)
-        TRY
-            Log "Sending data to API: {api_url}"
-            Set headers: Content-Type = "application/json", Accept = "application/json"
-            Send POST request with json_output to api_url
-            Log "API Response: {status_code} - {response_text}"
-            IF response status is success THEN
-                RETURN response JSON
-            ELSE
-                RAISE HTTPError
-            END IF
-        CATCH HTTPError as e
-            Log "HTTP Error: {status_code} - {response_text}"
-            RETURN None
-        CATCH RequestException as e
-            Log "Request Error: {e}"
-            RETURN None
-        END TRY
-    END METHOD
+14. It counts 1 success if everything worked, or 1 error if something went wrong.
 
-    METHOD process_incident
-        TRY
-            Log "Processing incident {self.incident_id} for account {self.account_num}"
-            Call read_customer_details
-            IF result != "success" OR Customer_Details is empty THEN
-                Log "No customer details found for account {self.account_num}"
-                RETURN False
-            END IF
-            Call get_payment_data
-            IF result != "success" THEN
-                Log "Failed to retrieve payment data for account {self.account_num}"
-            END IF
-            Set json_output = format_json_object()
-            Get api_url from Get_API_URL_Singleton
-            IF api_url is empty THEN
-                RAISE APIConfigError "Empty API URL in config"
-            END IF
-            Set api_response = send_to_api(json_output, api_url)
-            IF api_response is None THEN
-                RAISE IncidentCreationError "Empty API response"
-            END IF
-            Log "API Success: {api_response}"
-            RETURN True
-        CATCH Exception as e
-            Log "Unexpected error: {e}"
-            RETURN False
-        END TRY
-    END METHOD
-END CLASS
+15. It writes in the diary: "Processed 1 success, 0 errors" (or "0 successes, 1 error").
 
+16. It waits 1 second before moving to the next order.
+
+END Processing Order_Id 1

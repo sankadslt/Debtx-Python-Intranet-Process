@@ -1,257 +1,38 @@
-Pseudocode for Order_Id = 4 (Close Monitor If No Transaction)
+START Processing Order_Id 4
 
-1. Main Processing Loop (RequestManipulation.py: run_process)
-METHOD run_process
-    Log "Starting Order Processor"
-    WHILE True
-        TRY
-            Call get_open_orders to fetch rows from request_progress_log where Request_Status = 'Open'
-            IF no open orders THEN
-                Log "No open orders found. Waiting..."
-                Sleep for 5 seconds
-                CONTINUE
-            END IF
-            Log "Found {number} open orders"
-            FOR option FROM 1 TO 4
-                IF option == 4 THEN
-                    Filter rows where Order_Id == 4
-                    IF rows exist THEN
-                        Log "Processing {number} rows for Order_Id 4"
-                        Call close_monitor_if_no_transaction(filtered_rows)
-                    END IF
-                END IF
-            END FOR
-            Sleep for 1 second
-        CATCH KeyboardInterrupt
-            Log "Program terminated by user"
-            BREAK
-        CATCH Exception as e
-            Log "Unexpected error: {e}"
-            Sleep for 5 seconds
-        END TRY
-    END WHILE
-END METHOD
+1. The program finds an order with Order_Id 4 in the database (like checking a to-do list for "Open" tasks).
 
-2. Fetching Open Orders (RequestManipulation.py: get_open_orders)
-METHOD get_open_orders
-    TRY
-        Connect to MySQL using MySQLConnectionSingleton
-        Execute query: SELECT * FROM request_progress_log WHERE Request_Status = 'Open'
-        Fetch all rows
-        Log "Fetched {number} open orders from request_progress_log"
-        RETURN rows
-    CATCH Exception as e
-        Log "Error fetching open orders: {e}"
-        RETURN empty list
-    END TRY
-END METHOD
+2. It gets the request ID, account number, and case ID from the order.
 
-3. Processing Close Monitor (RequestManipulation.py: close_monitor_if_no_transaction)
-METHOD close_monitor_if_no_transaction(rows)
-    Log "Processing option 4 - Close Monitor If No Transaction"
-    Initialize processed_count = 0
-    Initialize error_count = 0
-    Set monitoring_interval_hours = 24
-    Create MonitorPayment instance (monitor_payment)
-    FOR each row in rows
-        IF row.Order_Id == 4 THEN
-            Get request_id from row['Request_Id']
-            Get account_num from row['account_num']
-            Get case_id from row['case_id']
-            IF request_id is missing OR account_num is missing OR case_id is missing THEN
-                Log "Skipping row - missing required fields: Request_Id={request_id}, account_num={account_num}, case_id={case_id}"
-                Increment error_count
-                CONTINUE
-            END IF
-            Log "Processing close monitor for Request_Id={request_id}, account_num={account_num}, case_id={case_id}"
-            TRY
-                Connect to MySQL using MySQLConnectionSingleton
-                IF connection fails THEN
-                    RAISE DatabaseConnectionError "Failed to connect to MySQL for close monitor processing"
-                END IF
-                Ping connection to ensure it’s alive
-                TRY
-                    Set now = current timestamp
-                    Set next_monitor_dtm = now + monitoring_interval_hours (24 hours)
-                    Create dictionary cursor
-                    Execute query: INSERT INTO process_monitor_log (
-                        case_id, Request_Id, last_monitored_dtm, next_monitor_dtm,
-                        Order_Id, account_num, Expire_Dtm, monitor_status,
-                        monitor_status_dtm, monitor_status_description
-                    ) VALUES (
-                        case_id, request_id, now, next_monitor_dtm,
-                        row['Order_Id'], account_num, NULL, 'Closed',
-                        now, 'Monitor closed due to no transaction'
-                    )
-                    Commit transaction
-                    IF rowcount != 1 THEN
-                        Log "Failed to create process_monitor_log for Request_Id={request_id}"
-                        Rollback transaction
-                        Increment error_count
-                        CONTINUE
-                    END IF
-                    Set monitor_id = last inserted id
-                    Create dictionary cursor
-                    Execute query: INSERT INTO process_monitor_progress_log (
-                        Monitor_Id, created_dtm, case_id, Request_Id,
-                        last_monitored_dtm, next_monitor_dtm, Order_Id,
-                        account_num, Expire_Dtm, monitor_status,
-                        monitor_status_dtm, monitor_status_description
-                    ) VALUES (
-                        monitor_id, now, case_id, request_id,
-                        now, next_monitor_dtm, row['Order_Id'],
-                        account_num, NULL, 'Closed',
-                        now, 'Monitor closed due to no transaction'
-                    )
-                    Commit transaction
-                    IF rowcount != 1 THEN
-                        Log "Failed to create process_monitor_progress_log for Monitor_Id={monitor_id}"
-                        Rollback transaction
-                        Increment error_count
-                        CONTINUE
-                    END IF
-                    Call monitor_payment.create_process_monitor_details(monitor_id, request_id, connection)
-                    IF not successful THEN
-                        Log "Failed to create process_monitor_details for Monitor_Id={monitor_id}"
-                        Rollback transaction
-                        Increment error_count
-                        CONTINUE
-                    END IF
-                    Call monitor_payment.update_request_progress_status(request_id, account_num, status="Completed", connection)
-                    IF not successful THEN
-                        Log "Failed to update request status for Request_Id={request_id}"
-                        Rollback transaction
-                        Increment error_count
-                        CONTINUE
-                    END IF
-                    Commit transaction
-                    Log "Successfully processed close monitor for Request_Id={request_id}"
-                    Increment processed_count
-                CATCH mysql.connector.Error as db_err
-                    Log "Database error during close monitor processing: {db_err}"
-                    Rollback transaction
-                    Increment error_count
-                    CONTINUE
-                CATCH Exception as e
-                    Log "Unexpected error in close monitor processing for Request_Id={request_id}: {e}"
-                    Rollback transaction
-                    Increment error_count
-                    CONTINUE
-                END TRY
-            CATCH DatabaseConnectionError as e
-                Log "Connection error: {e}"
-                Increment error_count
-                CONTINUE
-            END TRY
-            Sleep for 1 second
-        END IF
-    END FOR
-    Log "Processed {processed_count} documents, {error_count} errors"
-    RETURN processed_count, error_count
-END METHOD
+3. It checks if the account number, request ID, and case ID are okay:
+   - Account number must be text and not empty.
+   - Request ID must be a number greater than 0.
+   - Case ID must be text and not empty.
+   - If any are bad, it writes in the diary: "Invalid account number", "Invalid request ID", or "Invalid case ID", counts 1 error, and stops.
 
-4. MonitorPayment Class (MonitorPayment.py)
-CLASS MonitorPayment
-    CONSTRUCTOR
-        Log "MonitorPayment class initialized"
-        Set monitoring_interval_hours = 24
-    END CONSTRUCTOR
+4. It writes in the diary: "Processing close monitor for request ID X, account Y, case Z".
 
-    METHOD create_process_monitor_details(monitor_id, request_id, connection)
-        TRY
-            Call get_request_details(request_id, connection)
-            IF no details THEN
-                Log "No details found in request_log_details for Request_Id={request_id}"
-                RETURN False
-            END IF
-            Set details = result
-            Create dictionary cursor
-            Execute query: INSERT INTO process_monitor_details (
-                Monitor_Id, para_1, para_2, para_3, para_4, para_5,
-                para_6, para_7, para_8, para_9, para_10
-            ) VALUES (
-                monitor_id, details['para_1'], details['para_2'], details['para_3'],
-                details['para_4'], details['para_5'], details['para_6'],
-                details['para_7'], details['para_8'], details['para_9'], details['para_10']
-            )
-            Commit transaction
-            IF rowcount == 1 THEN
-                Log "Created process_monitor_details record for Monitor_Id={monitor_id}"
-                RETURN True
-            ELSE
-                Log "Failed to create process_monitor_details record"
-                RETURN False
-            END IF
-        CATCH Exception as e
-            Log "Error creating process_monitor_details record: {e}"
-            RETURN False
-        END TRY
-    END METHOD
+5. It starts the closing process:
+   - It connects to the database.
+   - It creates a new monitoring record (process_monitor_log) with:
+     - Case ID, request ID, account number, current time, next check time (in 24 hours), status "Closed", and a note "Monitor closed due to no transaction".
+   - If saving fails, it writes in the diary: "Failed to save monitoring record" and stops.
+   - It gets the new monitoring ID.
+   - It creates a progress record (process_monitor_progress_log) with the same details.
+   - If saving fails, it writes in the diary: "Failed to save progress record" and stops.
+   - It copies extra details from the request to a details record (process_monitor_details).
+   - If copying fails, it writes in the diary: "Failed to save details" and stops.
+   - It updates two database files (request_progress_log and request_log) to mark the order as "Completed".
+   - If updating fails, it writes in the diary: "Failed to update status" and stops.
 
-    METHOD get_request_details(request_id, connection)
-        TRY
-            Create dictionary cursor
-            Execute query: SELECT para_1, para_2, para_3, para_4, para_5,
-                          para_6, para_7, para_8, para_9, para_10
-                          FROM request_log_details WHERE Request_Id = {request_id}
-            Fetch one row
-            IF no result THEN
-                Log "No details found in request_log_details for Request_Id={request_id}"
-                RETURN None
-            END IF
-            Log "Retrieved request details for Request_Id={request_id}"
-            RETURN result
-        CATCH Exception as e
-            Log "Error fetching request details for Request_Id={request_id}: {e}"
-            RETURN None
-        END TRY
-    END METHOD
+6. It saves all changes to the database.
 
-    METHOD update_request_progress_status(request_id, account_num, status="Completed", connection=None)
-        TRY
-            IF connection is None THEN
-                Connect to MySQL using MySQLConnectionSingleton
-                IF connection fails THEN
-                    RAISE DatabaseConnectionError "Failed to connect to MySQL for updating request status"
-                END IF
-                Set close_connection = True
-            END IF
-            Create dictionary cursor
-            Execute query: UPDATE request_progress_log
-                          SET Request_Status = {status},
-                              Request_Status_Dtm = NOW(),
-                              Request_Status_Description = 'Monitoring cancellation completed' IF status == 'Completed' ELSE 'Error in cancellation process'
-                          WHERE Request_Id = {request_id} AND account_num = {account_num} AND Request_Status = 'Open'
-            IF rowcount != 1 THEN
-                Log "No rows updated in request_progress_log for Request_Id={request_id}, account_num={account_num}"
-                IF close_connection THEN
-                    Rollback transaction
-                END IF
-                RETURN False
-            END IF
-            Execute query: UPDATE request_log
-                          SET Request_Status = {status},
-                              Request_Status_Dtm = NOW(),
-                              Request_Status_Description = 'Monitoring cancellation completed' IF status == 'Completed' ELSE 'Error in cancellation process'
-                          WHERE Request_Id = {request_id} AND account_num = {account_num} AND Request_Status = 'Open'
-            IF rowcount != 1 THEN
-                Log "No rows updated in request_log for Request_Id={request_id}, account_num={account_num}"
-                IF close_connection THEN
-                    Rollback transaction
-                END IF
-                RETURN False
-            END IF
-            IF close_connection THEN
-                Commit transaction
-            END IF
-            Log "Successfully updated request_progress_log and request_log to {status} for Request_Id={request_id}, account_num={account_num}"
-            RETURN True
-        CATCH DatabaseConnectionError as e
-            Log "Connection error: {e}"
-            RETURN False
-        CATCH Exception as e
-            Log "Unexpected error updating request_progress_log or request_log for Request_Id={request_id}, account_num={account_num}: {e}"
-            RETURN False
-        END TRY
-    END METHOD
-END CLASS
+7. It writes in the diary: "Successfully closed monitor for request X".
+
+8. It counts 1 success if everything worked, or 1 error if something went wrong.
+
+9. It writes in the diary: "Processed 1 success, 0 errors" (or "0 successes, 1 error").
+
+10. It waits 1 second before moving to the next order.
+
+END Processing Order_Id 4
